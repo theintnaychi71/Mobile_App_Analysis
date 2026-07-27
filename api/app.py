@@ -2,6 +2,23 @@
 # COMPLETE API FOR APP MARKET DASHBOARD
 # ============================================
 
+# Fix Windows console Unicode encoding for emoji output
+import sys
+import io
+try:
+    if hasattr(sys.stdout, 'buffer'):
+        try:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+        except (ValueError, OSError):
+            pass
+    if hasattr(sys.stderr, 'buffer'):
+        try:
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace', line_buffering=True)
+        except (ValueError, OSError):
+            pass
+except Exception:
+    pass
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_pymongo import PyMongo
@@ -23,6 +40,12 @@ app = Flask(__name__)
 # Configuration
 app.config['MONGO_URI'] = os.environ.get('MONGO_URI')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-123')
+app.config['MONGO_DB'] = os.environ.get('MONGO_DB')
+app.config['MONGO_COLLECTION'] = os.environ.get('MONGO_COLLECTION')
+
+# Flask-PyMongo uses MONGO_DBNAME as fallback when URI has no DB path
+if os.environ.get('MONGO_DB'):
+    app.config['MONGO_DBNAME'] = os.environ.get('MONGO_DB')
 
 # Check if MongoDB is configured
 if not app.config['MONGO_URI']:
@@ -105,15 +128,116 @@ SAMPLE_DATA = [
 # DATABASE HELPERS
 # ============================================
 
+def _normalize_doc(doc):
+    """Map MongoDB field names (from clean_dataset.csv columns) to the
+    SAMPLE_DATA-style names that dashboard_stats() and other endpoints expect.
+
+    MongoDB actual fields (from uploaded clean_dataset.csv via transformer.py):
+      App Name, Category, Rating, Reviews, Installs, Free, Price, Released,
+      Last Updated, Developer, In-App Purchases, Price_Tier, Popularity_Tier
+
+    Expected by API code (SAMPLE_DATA naming):
+      app_name, category_clean, rating, reviews, installs, type, price_usd,
+      released, last_updated, developer, content_rating
+    """
+    # Work on a copy so original dict isn't mutated
+    d = dict(doc)
+
+    # 1. Category: Category -> category_clean
+    if 'category_clean' not in d or not d['category_clean']:
+        cat = d.get('Category')
+        if cat:
+            d['category_clean'] = cat
+        elif 'category' in d and d['category']:
+            d['category_clean'] = d['category']
+        else:
+            d.setdefault('category_clean', 'Unknown')
+
+    # 2. Rating: Rating (float) -> rating
+    if 'rating' not in d or d.get('rating') in (None, 0):
+        rating_val = d.get('Rating')
+        if isinstance(rating_val, (int, float)):
+            d['rating'] = float(rating_val)
+        elif 'rating' not in d:
+            d['rating'] = 0.0
+
+    # 3. Installs: Installs (int) -> installs
+    if 'installs' not in d or d.get('installs') in (None, 0):
+        inst_val = d.get('Installs')
+        if isinstance(inst_val, (int, float)):
+            d['installs'] = int(inst_val)
+        elif isinstance(inst_val, str):
+            import re as _re
+            cleaned = _re.sub(r'[^\d]', '', inst_val)
+            d['installs'] = int(cleaned) if cleaned else 0
+        elif 'installs' not in d:
+            d['installs'] = 0
+
+    # 4. Free/Paid Type: Free (TRUE/FALSE) or Price_Tier -> type ("Free"/"Paid")
+    if 'type' not in d or not d['type']:
+        is_free = False
+        free_field = d.get('Free')
+        if free_field is True or free_field in ('TRUE', 'True', 'true', '1', 1):
+            is_free = True
+        elif free_field is False or free_field in ('FALSE', 'False', 'false', '0', 0):
+            is_free = False
+        else:
+            # Fallback: use Price or Price_Tier
+            price_val = d.get('Price', d.get('price_usd', 0))
+            tier = d.get('Price_Tier')
+            if tier and str(tier).lower() == 'free':
+                is_free = True
+            elif isinstance(price_val, (int, float)) and price_val <= 0:
+                is_free = True
+        d['type'] = 'Free' if is_free else 'Paid'
+
+    # Extra aliases (not strictly needed by current endpoints, but for completeness)
+    if 'app_name' not in d:
+        if 'App Name' in d: d['app_name'] = d['App Name']
+    if 'reviews' not in d:
+        r = d.get('Reviews')
+        if isinstance(r, (int, float)): d['reviews'] = int(r)
+    if 'price_usd' not in d:
+        p = d.get('Price')
+        if isinstance(p, (int, float)): d['price_usd'] = float(p)
+    if 'last_updated' not in d and 'Last Updated' in d:
+        d['last_updated'] = d['Last Updated']
+    if 'released' not in d and 'Released' in d:
+        d['released'] = d['Released']
+    if 'developer' not in d and 'Developer' in d:
+        d['developer'] = d['Developer']
+    if 'content_rating' not in d:
+        # Not present in clean_dataset.csv; set reasonable default
+        d.setdefault('content_rating', 'Everyone')
+
+    return d
+
+
 def get_all_data():
-    """Get all data (from MongoDB or sample)"""
+    """Get all data (from MongoDB or sample) and normalize field names to
+    match what the dashboard API logic expects."""
     if app.config['USE_SAMPLE_DATA']:
         return SAMPLE_DATA
     
     try:
-        collection = mongo.db.apps
-        data = list(collection.find({}, {'_id': 0}))
-        return data if data else SAMPLE_DATA
+        db_name = app.config.get('MONGO_DB')
+        collection_name = app.config.get('MONGO_COLLECTION', 'apps')
+
+        if db_name:
+            db = mongo.cx[db_name]
+        else:
+            db = mongo.db
+
+        collection = db[collection_name]
+        raw_data = list(collection.find({}, {'_id': 0}))
+
+        if not raw_data:
+            return SAMPLE_DATA
+
+        # Normalize every document's field names so dashboard_stats() finds the keys it expects
+        data = [_normalize_doc(doc) for doc in raw_data]
+        return data
+
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
         return SAMPLE_DATA
