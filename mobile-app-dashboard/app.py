@@ -10,6 +10,10 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import pymongo
+import os
+from dotenv import load_dotenv
+
 def format_number(num):
     if num >= 1_000_000_000:
         return f"{num/1_000_000_000:.2f}B"
@@ -19,36 +23,63 @@ def format_number(num):
         return f"{num/1_000:.2f}K"
     else:
         return str(num)
+
 # ============================================================
 # SECTION 2: Basic Page Configuration
 # ============================================================
 st.set_page_config(
     page_title="Mobile App Market Analysis Dashboard",
-    page_icon="📱",
+    page_icon="",
     layout="wide"
 )
 
 # ============================================================
-# SECTION 3: Helper Function to Load Data
+# SECTION 3: Helper Function to Load Data (UPDATED FOR MONGODB)
 # ============================================================
-@st.cache_data
+@st.cache_data(ttl=3600)  # Caches data for 1 hour to prevent slow reloading
 def load_data():
     """
-    Load and preprocess the cleaned dataset from the data folder.
-    Received from Person 1: data/clean_dataset.csv
+    Load and preprocess the dataset DIRECTLY from MongoDB Atlas.
     """
-    import os
-    csv_path = os.path.join("data", "clean_dataset.csv")
-    if not os.path.exists(csv_path):
-        st.error(f"❌ Dataset not found at: `{csv_path}`. Please place `clean_dataset.csv` in the data/ folder.")
+    load_dotenv()
+    
+    # Fetch credentials (fallback to hardcoded URI only for local dev safety)
+    MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://data_uploader:A7KQDxaxgMKIbevE@cluster0.cuueyms.mongodb.net/?appName=Cluster0")
+    MONGO_DB = os.getenv("MONGO_DB", "app_market_db")
+    MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "apps")
+    
+    try:
+        # Connect to MongoDB with a 5-second timeout
+        client = pymongo.MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.admin.command('ping')  # Verify connection works
+        
+        db = client[MONGO_DB]
+        collection = db[MONGO_COLLECTION]
+        
+        # Fetch all documents, excluding the '_id' field
+        data_cursor = collection.find({}, {"_id": 0})
+        df = pd.DataFrame(list(data_cursor))
+        
+        if df.empty:
+            st.error("❌ MongoDB collection is empty. Please check your database.")
+            st.stop()
+            
+        
+        
+    except pymongo.errors.ServerSelectionTimeoutError:
+        st.error("❌ Could not connect to MongoDB. Please check your MONGO_URI and network connection.")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Error connecting to MongoDB: {e}")
         st.stop()
 
-    df = pd.read_csv(csv_path)
-
-    # Numeric conversions
+    # --- Preprocessing (Same as your original logic) ---
     numeric_cols = ["Rating", "Reviews", "Installs", "Price", "App_Age_Days"]
     for col in numeric_cols:
         if col in df.columns:
+            # Handle comma-separated strings (e.g., "1,000,000") before converting
+            if col in ["Installs", "Reviews"]:
+                df[col] = df[col].astype(str).str.replace(',', '', regex=False)
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Boolean conversions (TRUE/FALSE strings -> bool)
@@ -67,7 +98,6 @@ def load_data():
 
     return df
 
-
 # Load the data
 df = load_data()
 
@@ -78,15 +108,7 @@ st.title("📱 Mobile App Market Analysis Dashboard")
 st.markdown("""
 Welcome to our Mobile App Market Analysis Dashboard! 
 
-This dashboard provides an interactive overview of the **Google Play Store** mobile application market.
-Use the filters in the sidebar to explore trends across app categories, ratings, and free/paid applications.
-Ideal for understanding market demand, user preferences, and competitive landscapes.
 
-**👥 Team Project Members:**
-- Person 1: Project Manager
-- Person 2: Data Collection
-- Person 3: Data Cleaning & Preprocessing
-- Person 4: Dashboard Development & Data Visualization (YOU!)
 """)
 st.markdown("---")
 
@@ -99,7 +121,7 @@ st.sidebar.info("Customize all dashboard views using these filters.")
 # --- Filter 1: Category Multi-Select ---
 all_categories_sorted = sorted(df["Category"].dropna().unique().tolist())
 selected_categories = st.sidebar.multiselect(
-    "📂 Select App Categories",
+    " Select App Categories",
     options=all_categories_sorted,
     default=all_categories_sorted,
     help="Choose one or more categories. Leave empty to see all."
@@ -107,17 +129,18 @@ selected_categories = st.sidebar.multiselect(
 if not selected_categories:
     selected_categories = all_categories_sorted
 
-# --- Filter 2: Rating Range Slider ---
-_rated_all = df[df["Rating"] > 0]["Rating"]
-min_rating_raw = float(_rated_all.min()) if len(_rated_all) > 0 else 0.0
-max_rating_raw = float(_rated_all.max()) if len(_rated_all) > 0 else 5.0
+# --- Filter 2: Rating Range Slider (FIXED TO INCLUDE UNRATED APPS) ---
+# Set min to 0.0 to include unrated apps (Rating = 0 or NaN)
+min_rating_raw = 0.0
+max_rating_raw = float(df["Rating"].max()) if "Rating" in df.columns and not df["Rating"].empty else 5.0
+
 rating_range = st.sidebar.slider(
     "⭐ Rating Range",
     min_value=min_rating_raw,
     max_value=max_rating_raw,
     value=(min_rating_raw, max_rating_raw),
     step=0.1,
-    help="Filter apps within this rating band (zero-rated unrated apps are excluded from these bounds)."
+    help="Filter apps within this rating band (0.0 includes unrated apps)."
 )
 
 # --- Filter 3: Free / Paid Radio Buttons ---
@@ -130,9 +153,13 @@ free_paid_choice = st.sidebar.radio(
 # --- Apply Filters ---
 filtered_df = df.copy()
 filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
-filtered_df = filtered_df[
-    (filtered_df["Rating"] >= rating_range[0]) & (filtered_df["Rating"] <= rating_range[1])
-]
+
+# Only apply rating filter if user manually adjusted it away from the default (0.0 to max)
+if rating_range[1] < max_rating_raw or rating_range[0] > 0.0:
+    filtered_df = filtered_df[
+        (filtered_df["Rating"] >= rating_range[0]) & (filtered_df["Rating"] <= rating_range[1])
+    ]
+
 if free_paid_choice == "Free Only":
     filtered_df = filtered_df[filtered_df["Free"] == True]
 elif free_paid_choice == "Paid Only":
@@ -170,7 +197,7 @@ m3.metric(
     value=f"{total_reviews:,.0f}"
 )
 m4.metric(
-    label="📥 Total Installs",
+    label=" Total Installs",
    value=format_number(total_installs)
 )
 st.markdown("---")
@@ -180,7 +207,7 @@ st.markdown("---")
 # ============================================================
 row1_col1, row1_col2 = st.columns(2)
 with row1_col1:
-    st.subheader("📦 App Category Distribution")
+    st.subheader(" App Category Distribution")
 
     cat_counts = (
         filtered_df["Category"]
@@ -230,10 +257,8 @@ with row1_col1:
 
     st.markdown("---")
 
-    # Insight
-       # Insight based on Person 5 analysis
+    # Insight based on Person 5 analysis
     if not filtered_df.empty:
-
         category_install = (
             filtered_df.groupby("Category")["Installs"]
             .sum()
@@ -298,7 +323,6 @@ This shows that user ratings are generally positive.
 # ============================================================
 # SECTION 8: Visualization Row 2
 # ============================================================
-
 row2_col1, row2_col2 = st.columns(2)
 
 with row2_col1:
@@ -406,58 +430,70 @@ with row2_col2:
         )
 
 # ============================================================
-# SECTION 9: Visualization Row 3 (Full Width)
+# SECTION 9: Visualization Row 3 (Full Width) - APP RELEASE TRENDS
 # ============================================================
-st.subheader("📈 Installation Trend Over Time")
-trend_df = filtered_df.dropna(subset=["Last_Updated_Month"]).copy()
-if not trend_df.empty:
-    trend_monthly = (
-        trend_df.groupby("Last_Updated_Month")["Installs"]
-        .sum()
-        .reset_index()
-        .rename(columns={"Installs": "Total Installs", "Last_Updated_Month": "Last Updated Month"})
-        .sort_values("Last Updated Month")
-    )
-    # Also compute app count per month for a secondary axis
-    trend_counts = (
-        trend_df.groupby("Last_Updated_Month").size().reset_index(name="Apps Updated")
-        .rename(columns={"Last_Updated_Month": "Last Updated Month"})
-    )
-    trend_combined = trend_monthly.merge(trend_counts, on="Last Updated Month")
+st.subheader("📈 App Market Growth Over Time")
 
-    fig_trend = px.line(
-        trend_combined,
-        x="Last Updated Month",
-        y="Total Installs",
-        title="Total Installs by Last-Updated Month (with App Count per Month)",
-        markers=True,
-        line_shape="spline",
-        hover_data={"Apps Updated": True, "Total Installs": ":,.0f"},
-        labels={"Last Updated Month": "Last Updated (Month)", "Total Installs": "Total Installs"}
+# Try to use "Released" date. If it's mostly empty, fallback to "Last Updated" to ensure the chart works.
+date_col = "Released" if "Released" in filtered_df.columns and filtered_df["Released"].notna().sum() > 100 else "Last Updated"
+date_label = "Release Year" if date_col == "Released" else "Last Updated Year"
+
+release_df = filtered_df.dropna(subset=[date_col]).copy()
+
+if not release_df.empty:
+    # Extract the year from the date column
+    release_df["Year"] = release_df[date_col].dt.year
+    
+    # Filter out unrealistic years (e.g., typos like 1970 or future dates)
+    release_df = release_df[(release_df["Year"] >= 2008) & (release_df["Year"] <= 2026)]
+    
+    # Count the number of apps per year
+    release_yearly = (
+        release_df.groupby("Year")
+        .size()
+        .reset_index(name="Number of Apps")
+        .sort_values("Year")
     )
-    fig_trend.update_traces(line=dict(width=3), marker=dict(size=6, line=dict(width=1, color="white")))
-    fig_trend.update_layout(height=550, xaxis=dict(showgrid=True))
-    st.plotly_chart(fig_trend, use_container_width=True)
+
+    fig_release = px.bar(
+        release_yearly,
+        x="Year",
+        y="Number of Apps",
+        title=f"Number of Apps {date_label} (Market Growth)",
+        labels={"Year": "Year", "Number of Apps": "Number of Apps Published"},
+        color="Number of Apps",
+        color_continuous_scale="Viridis",
+        text="Number of Apps"
+    )
+    
+    fig_release.update_layout(height=550, xaxis=dict(dtick=1, showgrid=True))
+    fig_release.update_traces(texttemplate="%{text:,}", textposition="outside")
+    
+    st.plotly_chart(fig_release, use_container_width=True)
     st.markdown("---")
 
-    # Insight
-    if len(trend_combined) >= 2:
-        peak_row = trend_combined.loc[trend_combined["Total Installs"].idxmax()]
-        latest_row = trend_combined.iloc[-1]
-        first_row = trend_combined.iloc[0]
-        growth_str = ""
-        if first_row["Total Installs"] > 0:
-            pct_change = (latest_row["Total Installs"] - first_row["Total Installs"]) / first_row["Total Installs"] * 100
-            direction = "⬆️ grew" if pct_change > 0 else "⬇️ declined"
-            growth_str = f"Between {first_row['Last Updated Month'].strftime('%b %Y')} and {latest_row['Last Updated Month'].strftime('%b %Y')}, monthly installs {direction} by **{abs(pct_change):.1f}%**."
+    # Insight Generation
+    if len(release_yearly) > 0:
+        peak_year = release_yearly.loc[release_yearly["Number of Apps"].idxmax()]
+        latest_year = int(release_yearly["Year"].max())
+        
+        # Calculate recent trend (compare last 2 available years)
+        recent_data = release_yearly[release_yearly["Year"] >= latest_year - 1]
+        trend_text = ""
+        if len(recent_data) >= 2:
+            if recent_data.iloc[-1]["Number of Apps"] > recent_data.iloc[0]["Number of Apps"]:
+                trend_text = "an **upward trend** 📈"
+            else:
+                trend_text = "a **slight decline or stabilization** "
+        
         st.markdown(
-            f"💡 **Insight:** Installs peak in **{peak_row['Last Updated Month'].strftime('%B %Y')}** "
-            f"at **{peak_row['Total Installs']:,.0f} installs** across {peak_row['Apps Updated']:,} updated apps. "
-            f"{growth_str} Recently-updated apps consistently hold more installs, suggesting active maintenance "
-            f"strongly correlates with download success."
+            f"💡 **Insight:** The peak year for app publishing was **{int(peak_year['Year'])}** "
+            f"with **{peak_year['Number of Apps']:,} apps** released. "
+            f"Recent data shows {trend_text}, indicating how the market has evolved from a 'gold rush' era "
+            f"to a more mature, competitive landscape."
         )
 else:
-    st.warning("No valid Last Updated dates available for the current filter selection.")
+    st.warning("️ No valid date data available to generate the release trend chart.")
     st.markdown("---")
 
 # ============================================================
@@ -466,7 +502,7 @@ else:
 st.subheader("🎁 Bonus Deep-Dive Charts")
 tab_pt, tab_rc, tab_pc = st.tabs([
     "💸 Price Tier Distribution",
-    "🎯 Avg Rating per Category",
+    " Avg Rating per Category",
     "🔥 Popularity Tier by Category"
 ])
 
@@ -503,7 +539,7 @@ with tab_pt:
         mid_tier = pt_counts.loc[pt_counts["Price_Tier"].isin(["$1 - $5"]), "App Count"].sum() if "$1 - $5" in pt_counts["Price_Tier"].values else 0
         paid_pct_mid = (mid_tier / paid_total * 100) if paid_total else 0
         st.markdown(
-            f"💡 **Insight:** {pt_counts.iloc[0]['Price_Tier']} apps are the largest bucket "
+            f" **Insight:** {pt_counts.iloc[0]['Price_Tier']} apps are the largest bucket "
             f"with **{pt_counts.iloc[0]['App Count']:,}**. Among paid apps ({paid_total:,} total), "
             f"the **$1–$5 sweet-spot tier captures {paid_pct_mid:.1f}%**, suggesting low-to-mid price points "
             f"are the most common monetization strategy. Premium tiers (Over $10) remain niche."
@@ -574,7 +610,6 @@ with tab_pc:
     st.plotly_chart(fig_pc, use_container_width=True)
 
     # Insight
-    # Compute category with highest % of Mega Hit / Very Popular
     if not pop_ct.empty:
         cat_pct = (
             pop_df.groupby(["Category", "Popularity_Tier"]).size()
