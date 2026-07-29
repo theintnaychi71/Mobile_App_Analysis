@@ -38,10 +38,10 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configuration
-app.config['MONGO_URI'] = os.environ.get('MONGO_URI')
+app.config['MONGO_URI'] = os.environ.get('MONGO_URI', 'mongodb+srv://data_uploader:A7KQDxaxgMKIbevE@cluster0.cuueyms.mongodb.net/?appName=Cluster0')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-123')
-app.config['MONGO_DB'] = os.environ.get('MONGO_DB')
-app.config['MONGO_COLLECTION'] = os.environ.get('MONGO_COLLECTION')
+app.config['MONGO_DB'] = os.environ.get('MONGO_DB', 'app_market_db')
+app.config['MONGO_COLLECTION'] = os.environ.get('MONGO_COLLECTION', 'apps')
 
 # Flask-PyMongo uses MONGO_DBNAME as fallback when URI has no DB path
 if os.environ.get('MONGO_DB'):
