@@ -1,10 +1,11 @@
 import pandas as pd
 import pymongo
+import re
 
 # ----------------------------------------------------
 # CSV File Loading
 # ----------------------------------------------------
-CSV_FILE = 'clean_dataset.csv'
+CSV_FILE = r'D:\MobileAppAnalysis\data\processed\clean_dataset.csv'
 
 print(f" Loading '{CSV_FILE}'...")
 try:

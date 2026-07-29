@@ -2,14 +2,15 @@ import pandas as pd
 import numpy as np
 import re
 
-print("🚀 Starting Final Data Cleaning Pipeline (v4 - Missing Date Fix)...")
+print(" Starting Final Data Cleaning Pipeline...")
 
-input_file = "google_play_dataset.csv"
-output_file = "clean_dataset.csv"
+# Use your specific file path
+input_file = r'D:\MobileAppAnalysis\data\processed\clean_dataset.csv'
+output_file = r'D:\MobileAppAnalysis\data\processed\clean_dataset_final.csv'
 
 try:
     df = pd.read_csv(input_file)
-    print(f"✅ Loaded {len(df)} rows.")
+    print(f"✅ Loaded {len(df)} rows from clean_dataset.csv")
 except FileNotFoundError:
     print(f"❌ Error: Could not find '{input_file}'.")
     exit()
@@ -42,9 +43,9 @@ df["Rating"] = pd.to_numeric(df["Rating"], errors="coerce").fillna(0.0)
 df["Released"] = pd.to_datetime(df["Released"], errors="coerce")
 df["Last Updated"] = pd.to_datetime(df["Last Updated"], errors="coerce")
 
-# 5.5. HANDLE MISSING DATES (Critical for dashboard)
+# 5.5. HANDLE MISSING DATES
 print("\n" + "="*50)
-print("📅 Analyzing Missing Dates...")
+print(" Analyzing Missing Dates...")
 print("="*50)
 
 released_missing = df["Released"].isna().sum()
@@ -54,36 +55,31 @@ total_rows = len(df)
 print(f"  Missing 'Released' dates: {released_missing} ({(released_missing/total_rows)*100:.2f}%)")
 print(f"  Missing 'Last Updated' dates: {last_updated_missing} ({(last_updated_missing/total_rows)*100:.2f}%)")
 
-# Strategy: If less than 10% missing, drop those rows. Otherwise, fill with median.
-MISSING_THRESHOLD = 10  # percentage
+MISSING_THRESHOLD = 10
 
 if released_missing > 0:
     released_pct = (released_missing / total_rows) * 100
     if released_pct < MISSING_THRESHOLD:
-        print(f"  🗑️  Dropping {released_missing} rows with missing 'Released' (< {MISSING_THRESHOLD}%)")
+        print(f"  🗑️  Dropping {released_missing} rows with missing 'Released'")
         df = df.dropna(subset=["Released"])
     else:
         print(f"  📅 Filling {released_missing} missing 'Released' dates with median")
         median_released = df["Released"].median()
         df["Released"] = df["Released"].fillna(median_released)
-        df["Released_Was_Missing"] = True
-        df.loc[df["Released"].notna() & ~df["Released_Was_Missing"], "Released_Was_Missing"] = False
 
 if last_updated_missing > 0:
     last_updated_pct = (last_updated_missing / total_rows) * 100
     if last_updated_pct < MISSING_THRESHOLD:
-        print(f"  🗑️  Dropping {last_updated_missing} rows with missing 'Last Updated' (< {MISSING_THRESHOLD}%)")
+        print(f"  🗑️  Dropping {last_updated_missing} rows with missing 'Last Updated'")
         df = df.dropna(subset=["Last Updated"])
     else:
         print(f"  📅 Filling {last_updated_missing} missing 'Last Updated' dates with median")
         median_updated = df["Last Updated"].median()
         df["Last Updated"] = df["Last Updated"].fillna(median_updated)
-        df["Last_Updated_Was_Missing"] = True
-        df.loc[df["Last Updated"].notna() & ~df["Last_Updated_Was_Missing"], "Last_Updated_Was_Missing"] = False
 
 print(f"  ✅ Dataset after date cleanup: {len(df)} rows")
 
-# 6. Handle Missing Values for other columns
+# 6. Handle Missing Values
 df["Category"] = df["Category"].fillna("Unknown").str.strip()
 df["Developer"] = df["Developer"].fillna("Unknown Developer").str.strip()
 df["Free"] = df["Free"].fillna(False)
@@ -110,7 +106,7 @@ def get_popularity_tier(installs):
     else: return "Mega Hit (10M+)"
 df["Popularity_Tier"] = df["Installs"].apply(get_popularity_tier)
 
-# 8. DROP USELESS/EMPTY COLUMNS
+# 8. Drop Useless Columns
 columns_to_drop = ["Description", "Summary", "Size", "Min Android", "Content Rating", "Size_MB"]
 df = df.drop(columns=[col for col in columns_to_drop if col in df.columns])
 
@@ -121,7 +117,7 @@ print("\n" + "="*50)
 print("✅ DATA CLEANING COMPLETE!")
 print(f" Final Dataset: {df.shape[0]} rows, {df.shape[1]} columns")
 print(f"💾 Saved to: {output_file}")
-print("\n📋 Ready for Dashboard Columns:")
+print("\n Final Columns:")
 for col in df.columns:
     print(f"  - {col}")
 print("="*50)
