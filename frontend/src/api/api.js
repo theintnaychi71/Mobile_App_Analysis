@@ -29,6 +29,56 @@ export const getCategoryAnalysis = async (category = 'All') => {
   }
 };
 
+export const getTopApps = async (metric = 'installs', limit = 20) => {
+  try {
+    const response = await api.get(`/top-apps?metric=${metric}&limit=${limit}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching top apps:', error);
+    throw error;
+  }
+};
+
+export const getRatingDistribution = async () => {
+  try {
+    const response = await api.get('/rating-distribution');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching rating distribution:', error);
+    throw error;
+  }
+};
+
+export const getCorrelationAnalysis = async () => {
+  try {
+    const response = await api.get('/correlation-analysis');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching correlation analysis:', error);
+    throw error;
+  }
+};
+
+export const getPriceDistribution = async () => {
+  try {
+    const response = await api.get('/price-distribution');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching price distribution:', error);
+    throw error;
+  }
+};
+
+export const getInsights = async () => {
+  try {
+    const response = await api.get('/insights');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching insights:', error);
+    throw error;
+  }
+};
+
 export const healthCheck = async () => {
   try {
     const response = await axios.get('http://localhost:5000/health');

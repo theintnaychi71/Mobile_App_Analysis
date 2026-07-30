@@ -1,21 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { getDashboardStats, getCategoryAnalysis } from '../api/api';
+import { 
+  getDashboardStats, getCategoryAnalysis, getTopApps, 
+  getRatingDistribution, getCorrelationAnalysis, getPriceDistribution, getInsights 
+} from '../api/api';
 import { 
   Smartphone, TrendingUp, Users, Download, Star, 
   PieChart, BarChart3, RefreshCw, Filter, ArrowUpRight,
-  Package, DollarSign, Activity
+  Package, DollarSign, Activity, ScatterChart as ScatterChartIcon, Trophy, Award
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, AreaChart, Area
+  PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
+  ScatterChart, Scatter, ZAxis
 } from 'recharts';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [categoryData, setCategoryData] = useState([]);
+  const [topApps, setTopApps] = useState([]);
+  const [ratingDistribution, setRatingDistribution] = useState([]);
+  const [correlationData, setCorrelationData] = useState(null);
+  const [priceDistribution, setPriceDistribution] = useState(null);
+  const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('All');
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     fetchData();
@@ -25,12 +34,42 @@ const Dashboard = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      // Load essential data first (stats and category data)
       const [statsData, categoryAnalysis] = await Promise.all([
         getDashboardStats(),
-        getCategoryAnalysis(selectedCategory)
+        getCategoryAnalysis()
       ]);
+      
       setStats(statsData);
       setCategoryData(categoryAnalysis);
+      
+      // Load detailed data in background after essential data is loaded
+      setTimeout(async () => {
+        try {
+          const [
+            topAppsData,
+            ratingDistData,
+            correlationAnalysisData,
+            priceDistData,
+            insightsData
+          ] = await Promise.all([
+            getTopApps('installs', 15),
+            getRatingDistribution(),
+            getCorrelationAnalysis(),
+            getPriceDistribution(),
+            getInsights()
+          ]);
+          setTopApps(topAppsData);
+          setRatingDistribution(ratingDistData);
+          setCorrelationData(correlationAnalysisData);
+          setPriceDistribution(priceDistData);
+          setInsights(insightsData);
+        } catch (err) {
+          console.error('Error loading detailed data:', err);
+        }
+      }, 100);
+      
     } catch (err) {
       setError('Failed to fetch data. Please ensure the backend API is running.');
       console.error(err);
@@ -85,7 +124,7 @@ const Dashboard = () => {
     { name: 'Paid', value: stats.total_apps - stats.free_apps, color: '#4285F4' }
   ];
 
-  const ratingDistribution = [
+  const ratingDistChart = ratingDistribution.length > 0 ? ratingDistribution : [
     { range: '5.0', count: Math.floor(stats.total_apps * 0.15) },
     { range: '4.0-4.9', count: Math.floor(stats.total_apps * 0.35) },
     { range: '3.0-3.9', count: Math.floor(stats.total_apps * 0.25) },
@@ -120,6 +159,23 @@ const Dashboard = () => {
           </button>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex space-x-4 mb-8 border-b border-gray-700 pb-4">
+          {['overview', 'apps', 'correlations', 'pricing'].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === tab
+                  ? 'bg-google-blue text-white'
+                  : 'bg-play-surface text-gray-400 hover:text-white'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatCard
@@ -152,203 +208,444 @@ const Dashboard = () => {
           />
         </div>
 
-        {/* Charts Row 1 */}
-        <div className="grid lg:grid-cols-2 gap-6 mb-8">
-          {/* Category Distribution */}
-          <ChartCard
-            title="Top Categories by App Count"
-            icon={<BarChart3 className="w-5 h-5" />}
-          >
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={stats.top_categories.slice(0, 10)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tick={{ fill: '#9CA3AF' }}
-                />
-                <YAxis 
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tick={{ fill: '#9CA3AF' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F1F1F', 
-                    border: '1px solid #374151',
-                    borderRadius: '8px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Bar dataKey="count" fill="#4285F4" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Charts Row 1 */}
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              {/* Category Distribution */}
+              <ChartCard
+                title="Top Categories by App Count"
+                icon={<BarChart3 className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={stats.top_categories.slice(0, 10)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <YAxis 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Bar dataKey="count" fill="#4285F4" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
 
-          {/* Free vs Paid */}
-          <ChartCard
-            title="Free vs Paid Apps Distribution"
-            icon={<PieChart className="w-5 h-5" />}
-          >
-            <ResponsiveContainer width="100%" height={350}>
-              <RechartsPieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F1F1F', 
-                    border: '1px solid #374151',
-                    borderRadius: '8px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Legend 
-                  verticalAlign="bottom" 
-                  height={36}
-                  wrapperStyle={{ color: '#9CA3AF' }}
-                />
-              </RechartsPieChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </div>
+              {/* Free vs Paid */}
+              <ChartCard
+                title="Free vs Paid Apps Distribution"
+                icon={<PieChart className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={350}>
+                  <RechartsPieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={120}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Legend 
+                      verticalAlign="bottom" 
+                      height={36}
+                      wrapperStyle={{ color: '#9CA3AF' }}
+                    />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
 
-        {/* Charts Row 2 */}
-        <div className="grid lg:grid-cols-2 gap-6 mb-8">
-          {/* Rating Distribution */}
-          <ChartCard
-            title="Rating Distribution"
-            icon={<Star className="w-5 h-5" />}
-          >
-            <ResponsiveContainer width="100%" height={350}>
-              <AreaChart data={ratingDistribution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis 
-                  dataKey="range" 
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tick={{ fill: '#9CA3AF' }}
-                />
-                <YAxis 
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tick={{ fill: '#9CA3AF' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F1F1F', 
-                    border: '1px solid #374151',
-                    borderRadius: '8px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="count" 
-                  stroke="#F4B400" 
-                  fill="#F4B400" 
-                  fillOpacity={0.3}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartCard>
+            {/* Charts Row 2 */}
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              {/* Rating Distribution */}
+              <ChartCard
+                title="Rating Distribution"
+                icon={<Star className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={350}>
+                  <AreaChart data={ratingDistChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="range" 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <YAxis 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="count" 
+                      stroke="#F4B400" 
+                      fill="#F4B400" 
+                      fillOpacity={0.3}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartCard>
 
-          {/* Install Tiers */}
-          <ChartCard
-            title="Install Distribution by Tier"
-            icon={<Download className="w-5 h-5" />}
-          >
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={installTiers} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis 
-                  type="number"
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tick={{ fill: '#9CA3AF' }}
-                />
-                <YAxis 
-                  type="category"
-                  dataKey="tier"
-                  stroke="#9CA3AF"
-                  fontSize={12}
-                  tick={{ fill: '#9CA3AF' }}
-                  width={60}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1F1F1F', 
-                    border: '1px solid #374151',
-                    borderRadius: '8px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Bar dataKey="count" fill="#0F9D58" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
-        </div>
+              {/* Install Tiers */}
+              <ChartCard
+                title="Install Distribution by Tier"
+                icon={<Download className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={installTiers} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      type="number"
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <YAxis 
+                      type="category"
+                      dataKey="tier"
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                      width={60}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Bar dataKey="count" fill="#0F9D58" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
 
-        {/* Category Analysis Table */}
-        <ChartCard
-          title="Category Analysis"
-          icon={<Activity className="w-5 h-5" />}
-        >
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="text-left py-3 px-4 text-gray-400 font-medium">Category</th>
-                  <th className="text-right py-3 px-4 text-gray-400 font-medium">Apps</th>
-                  <th className="text-right py-3 px-4 text-gray-400 font-medium">Avg Rating</th>
-                  <th className="text-right py-3 px-4 text-gray-400 font-medium">Total Installs</th>
-                  <th className="text-right py-3 px-4 text-gray-400 font-medium">Avg Installs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categoryData.slice(0, 10).map((cat, index) => (
-                  <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
-                    <td className="py-3 px-4 font-medium">{cat.category}</td>
-                    <td className="text-right py-3 px-4 text-gray-400">{cat.count.toLocaleString()}</td>
-                    <td className="text-right py-3 px-4">
-                      <span className="inline-flex items-center">
-                        <Star className="w-4 h-4 text-google-yellow mr-1" />
-                        {cat.avg_rating}
-                      </span>
-                    </td>
-                    <td className="text-right py-3 px-4 text-gray-400">{formatNumber(cat.total_installs)}</td>
-                    <td className="text-right py-3 px-4 text-gray-400">{formatNumber(cat.avg_installs)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
+            {/* Category Analysis Table */}
+            <ChartCard
+              title="Category Analysis"
+              icon={<Activity className="w-5 h-5" />}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-4 text-gray-400 font-medium">Category</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Apps</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Avg Rating</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Total Installs</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Avg Installs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categoryData.slice(0, 10).map((cat, index) => (
+                      <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                        <td className="py-3 px-4 font-medium">{cat.category}</td>
+                        <td className="text-right py-3 px-4 text-gray-400">{cat.count.toLocaleString()}</td>
+                        <td className="text-right py-3 px-4">
+                          <span className="inline-flex items-center">
+                            <Star className="w-4 h-4 text-google-yellow mr-1" />
+                            {cat.avg_rating}
+                          </span>
+                        </td>
+                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(cat.total_installs)}</td>
+                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(cat.avg_installs)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
 
-        {/* Insights Section */}
-        <div className="mt-8 grid md:grid-cols-2 gap-6">
-          <InsightCard
-            title="Market Dominance"
-            icon={<TrendingUp className="w-5 h-5 text-google-green" />}
-            insight={`${stats.top_categories[0]?.name || 'Unknown'} category leads with ${stats.top_categories[0]?.count || 0} apps, showing highest market concentration.`}
-          />
-          <InsightCard
-            title="Monetization Trend"
-            icon={<DollarSign className="w-5 h-5 text-google-blue" />}
-            insight={`${stats.free_percentage}% of apps are free, confirming freemium model dominates the mobile app market.`}
-          />
-        </div>
+            {/* Insights Section */}
+            <div className="mt-8 grid md:grid-cols-2 gap-6">
+              {insights.map((insight, index) => (
+                <InsightCard
+                  key={index}
+                  title={insight.title}
+                  icon={insight.type === 'category_dominance' ? <TrendingUp className="w-5 h-5 text-google-green" /> :
+                        insight.type === 'rating_analysis' ? <Star className="w-5 h-5 text-google-yellow" /> :
+                        insight.type === 'monetization' ? <DollarSign className="w-5 h-5 text-google-blue" /> :
+                        <Download className="w-5 h-5 text-google-red" />}
+                  insight={insight.message}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Apps Tab */}
+        {activeTab === 'apps' && (
+          <>
+            <div className="grid lg:grid-cols-1 gap-6 mb-8">
+              <ChartCard
+                title="Top 15 Apps by Installs"
+                icon={<Trophy className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={topApps} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      type="number"
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                      tickFormatter={(value) => formatNumber(value)}
+                    />
+                    <YAxis 
+                      type="category"
+                      dataKey="name"
+                      stroke="#9CA3AF"
+                      fontSize={11}
+                      tick={{ fill: '#9CA3AF' }}
+                      width={150}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                      formatter={(value) => formatNumber(value)}
+                    />
+                    <Bar dataKey="installs" fill="#4285F4" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            <ChartCard
+              title="Top Apps Details"
+              icon={<Award className="w-5 h-5" />}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-3 px-4 text-gray-400 font-medium">App Name</th>
+                      <th className="text-left py-3 px-4 text-gray-400 font-medium">Category</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Rating</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Installs</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Reviews</th>
+                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topApps.map((app, index) => (
+                      <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                        <td className="py-3 px-4 font-medium">{app.name}</td>
+                        <td className="py-3 px-4 text-gray-400">{app.category}</td>
+                        <td className="text-right py-3 px-4">
+                          <span className="inline-flex items-center">
+                            <Star className="w-4 h-4 text-google-yellow mr-1" />
+                            {app.rating}
+                          </span>
+                        </td>
+                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(app.installs)}</td>
+                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(app.reviews)}</td>
+                        <td className="text-right py-3 px-4">
+                          <span className={`px-2 py-1 rounded text-xs ${
+                            app.type === 'Free' ? 'bg-google-green/20 text-google-green' : 'bg-google-blue/20 text-google-blue'
+                          }`}>
+                            {app.type}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ChartCard>
+          </>
+        )}
+
+        {/* Correlations Tab */}
+        {activeTab === 'correlations' && correlationData && (
+          <>
+            <div className="grid lg:grid-cols-3 gap-6 mb-8">
+              <CorrelationCard
+                title="Rating vs Reviews"
+                value={correlationData.correlations.rating_reviews}
+                description="Correlation between app ratings and review counts"
+                color="google-blue"
+              />
+              <CorrelationCard
+                title="Rating vs Installs"
+                value={correlationData.correlations.rating_installs}
+                description="Correlation between app ratings and install counts"
+                color="google-green"
+              />
+              <CorrelationCard
+                title="Reviews vs Installs"
+                value={correlationData.correlations.reviews_installs}
+                description="Correlation between review counts and install counts"
+                color="google-yellow"
+              />
+            </div>
+
+            <ChartCard
+              title="Rating vs Reviews Scatter Plot"
+              icon={<ScatterChartIcon className="w-5 h-5" />}
+            >
+              <ResponsiveContainer width="100%" height={400}>
+                <ScatterChart data={correlationData.scatter_data}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    type="number" 
+                    dataKey="rating" 
+                    name="Rating"
+                    stroke="#9CA3AF"
+                    fontSize={12}
+                    tick={{ fill: '#9CA3AF' }}
+                    domain={[0, 5]}
+                  />
+                  <YAxis 
+                    type="number" 
+                    dataKey="reviews" 
+                    name="Reviews"
+                    stroke="#9CA3AF"
+                    fontSize={12}
+                    tick={{ fill: '#9CA3AF' }}
+                    tickFormatter={(value) => formatNumber(value)}
+                  />
+                  <Tooltip 
+                    cursor={{ strokeDasharray: '3 3' }}
+                    contentStyle={{ 
+                      backgroundColor: '#1F1F1F', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px'
+                    }}
+                    itemStyle={{ color: '#fff' }}
+                    formatter={(value, name) => [
+                      name === 'Rating' ? value.toFixed(2) : formatNumber(value),
+                      name
+                    ]}
+                  />
+                  <Scatter fill="#4285F4" />
+                </ScatterChart>
+              </ResponsiveContainer>
+              <p className="text-center text-gray-400 text-sm mt-4">
+                Sample size: {correlationData.sample_size} apps from {correlationData.total_analyzed} total
+              </p>
+            </ChartCard>
+          </>
+        )}
+
+        {/* Pricing Tab */}
+        {activeTab === 'pricing' && priceDistribution && (
+          <>
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
+              <ChartCard
+                title="App Count by Price Range"
+                icon={<DollarSign className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={priceDistribution.app_count}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="price" 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <YAxis 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Bar dataKey="count" fill="#0F9D58" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              <ChartCard
+                title="Install Distribution by Price Range"
+                icon={<Download className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={350}>
+                  <BarChart data={priceDistribution.install_distribution}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      dataKey="price" 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
+                    <YAxis 
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                      tickFormatter={(value) => formatNumber(value)}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                      formatter={(value) => formatNumber(value)}
+                    />
+                    <Bar dataKey="installs" fill="#F4B400" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+            </div>
+
+            <InsightCard
+              title="Pricing Strategy Insight"
+              icon={<DollarSign className="w-5 h-5 text-google-blue" />}
+              insight="Free apps dominate the market in both count and installs. Paid apps in the $1-5 range show the best balance between app count and user adoption."
+            />
+          </>
+        )}
       </div>
     </div>
   );
@@ -397,5 +694,26 @@ const InsightCard = ({ title, icon, insight }) => (
     </div>
   </div>
 );
+
+const CorrelationCard = ({ title, value, description, color }) => {
+  const colorClasses = {
+    'google-green': 'bg-google-green/10 text-google-green border-google-green',
+    'google-blue': 'bg-google-blue/10 text-google-blue border-google-blue',
+    'google-yellow': 'bg-google-yellow/10 text-google-yellow border-google-yellow',
+    'google-red': 'bg-google-red/10 text-google-red border-google-red',
+  };
+
+  return (
+    <div className={`card border-l-4 ${colorClasses[color]}`}>
+      <div className="text-center">
+        <h4 className="font-semibold mb-2">{title}</h4>
+        <div className={`text-4xl font-bold ${colorClasses[color].split(' ')[1]} mb-2`}>
+          {value.toFixed(3)}
+        </div>
+        <p className="text-gray-400 text-sm">{description}</p>
+      </div>
+    </div>
+  );
+};
 
 export default Dashboard;
