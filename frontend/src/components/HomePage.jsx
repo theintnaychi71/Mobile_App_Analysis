@@ -1,8 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Smartphone, TrendingUp, PieChart, BarChart3, Users, Download, Star, Shield } from 'lucide-react';
+import { Smartphone, TrendingUp, PieChart, BarChart3, Users, Download, Star, Shield, RefreshCw } from 'lucide-react';
+import { getDashboardStats } from '../api/api';
 
 const HomePage = () => {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const data = await getDashboardStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatNumber = (num) => {
+    if (num >= 1000000000) return `${(num / 1000000000).toFixed(1)}B+`;
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M+`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K+`;
+    return num.toString();
+  };
   return (
     <div className="pt-16">
       {/* Hero Section */}
@@ -26,7 +51,7 @@ const HomePage = () => {
             </h1>
             
             <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-10">
-              Analyze thousands of mobile applications across categories, ratings, installs, and pricing models. 
+              Analyze {loading ? 'thousands' : stats?.total_apps?.toLocaleString() || 'thousands'} of mobile applications across {loading ? '50+' : stats?.total_categories || '50+'} categories, ratings, installs, and pricing models. 
               Make data-driven decisions for your next app venture.
             </p>
             
@@ -54,11 +79,37 @@ const HomePage = () => {
       {/* Stats Section */}
       <section className="py-16 bg-play-surface/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-white">Live Statistics</h3>
+            <button
+              onClick={fetchStats}
+              className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="text-sm">Refresh</span>
+            </button>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <StatCard icon={<Download className="w-8 h-8 text-google-green" />} label="Apps Analyzed" value="10,000+" />
-            <StatCard icon={<Users className="w-8 h-8 text-google-blue" />} label="Categories" value="50+" />
-            <StatCard icon={<Star className="w-8 h-8 text-google-yellow" />} label="Avg Rating" value="4.2" />
-            <StatCard icon={<Shield className="w-8 h-8 text-google-red" />} label="Data Points" value="1M+" />
+            <StatCard 
+              icon={<Download className="w-8 h-8 text-google-green" />} 
+              label="Apps Analyzed" 
+              value={loading ? '...' : stats?.total_apps?.toLocaleString() || 'N/A'} 
+            />
+            <StatCard 
+              icon={<Users className="w-8 h-8 text-google-blue" />} 
+              label="Categories" 
+              value={loading ? '...' : stats?.total_categories || 'N/A'} 
+            />
+            <StatCard 
+              icon={<Star className="w-8 h-8 text-google-yellow" />} 
+              label="Avg Rating" 
+              value={loading ? '...' : `${stats?.avg_rating?.toFixed(1) || 'N/A'}/5.0`} 
+            />
+            <StatCard 
+              icon={<Shield className="w-8 h-8 text-google-red" />} 
+              label="Total Installs" 
+              value={loading ? '...' : formatNumber(stats?.total_installs || 0)} 
+            />
           </div>
         </div>
       </section>
