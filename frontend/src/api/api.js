@@ -79,6 +79,16 @@ export const getInsights = async () => {
   }
 };
 
+export const getReleaseYearDistribution = async () => {
+  try {
+    const response = await api.get('/release-year-distribution');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching release year distribution:', error);
+    throw error;
+  }
+};
+
 export const healthCheck = async () => {
   try {
     const response = await axios.get('http://localhost:5000/health');

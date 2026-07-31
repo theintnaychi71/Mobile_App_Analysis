@@ -694,6 +694,45 @@ def price_distribution():
         logger.error(f"Error in price_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/release-year-distribution')
+def release_year_distribution():
+    """Get release year distribution data"""
+    cache_key = 'release_year_distribution'
+    
+    cached = get_cached(cache_key)
+    if cached:
+        return jsonify(cached)
+    
+    try:
+        data = get_all_data()
+        
+        if not data:
+            return jsonify({'error': 'No data found'}), 404
+        
+        # Extract release years
+        year_counts = {}
+        for app in data:
+            released = app.get('released', app.get('Released', ''))
+            if released:
+                # Try to extract year from various date formats
+                import re as _re
+                year_match = _re.search(r'\b(19|20)\d{2}\b', str(released))
+                if year_match:
+                    year = year_match.group()
+                    year_counts[year] = year_counts.get(year, 0) + 1
+        
+        # Sort by year
+        sorted_years = sorted(year_counts.items(), key=lambda x: x[0])
+        
+        result = [{'year': k, 'count': v} for k, v in sorted_years]
+        
+        set_cached(cache_key, result)
+        return jsonify(result)
+    
+    except Exception as e:
+        logger.error(f"Error in release_year_distribution: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/insights')
 def insights():
     """Get key insights from the data"""
@@ -782,6 +821,7 @@ if __name__ == '__main__':
     print("  GET /api/rating-distribution")
     print("  GET /api/correlation-analysis")
     print("  GET /api/price-distribution")
+    print("  GET /api/release-year-distribution")
     print("  GET /api/insights")
     print("=" * 50)
     

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   getDashboardStats, getCategoryAnalysis, getTopApps, 
-  getRatingDistribution, getCorrelationAnalysis, getPriceDistribution, getInsights 
+  getRatingDistribution, getCorrelationAnalysis, getPriceDistribution, getInsights, getReleaseYearDistribution 
 } from '../api/api';
 import { 
   Smartphone, TrendingUp, Users, Download, Star, 
@@ -18,9 +18,11 @@ const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [categoryData, setCategoryData] = useState([]);
   const [topApps, setTopApps] = useState([]);
+  const [topAppsByReviews, setTopAppsByReviews] = useState([]); // NEW STATE
   const [ratingDistribution, setRatingDistribution] = useState([]);
   const [correlationData, setCorrelationData] = useState(null);
   const [priceDistribution, setPriceDistribution] = useState(null);
+  const [releaseYearDistribution, setReleaseYearDistribution] = useState([]);
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -49,21 +51,27 @@ const Dashboard = () => {
         try {
           const [
             topAppsData,
+            topAppsByReviewsData, // NEW
             ratingDistData,
             correlationAnalysisData,
             priceDistData,
+            releaseYearData,
             insightsData
           ] = await Promise.all([
             getTopApps('installs', 15),
+            getTopApps('reviews', 15), // NEW: Fetch top apps by reviews
             getRatingDistribution(),
             getCorrelationAnalysis(),
             getPriceDistribution(),
+            getReleaseYearDistribution(),
             getInsights()
           ]);
           setTopApps(topAppsData);
+          setTopAppsByReviews(topAppsByReviewsData); // NEW
           setRatingDistribution(ratingDistData);
           setCorrelationData(correlationAnalysisData);
           setPriceDistribution(priceDistData);
+          setReleaseYearDistribution(releaseYearData);
           setInsights(insightsData);
         } catch (err) {
           console.error('Error loading detailed data:', err);
@@ -161,7 +169,7 @@ const Dashboard = () => {
 
         {/* Tab Navigation */}
         <div className="flex space-x-4 mb-8 border-b border-gray-700 pb-4">
-          {['overview', 'apps', 'correlations', 'pricing'].map((tab) => (
+          {['overview', 'apps', 'correlations', 'pricing', 'trends'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -415,7 +423,7 @@ const Dashboard = () => {
         {/* Apps Tab */}
         {activeTab === 'apps' && (
           <>
-            <div className="grid lg:grid-cols-1 gap-6 mb-8">
+            <div className="grid lg:grid-cols-2 gap-6 mb-8">
               <ChartCard
                 title="Top 15 Apps by Installs"
                 icon={<Trophy className="w-5 h-5" />}
@@ -448,6 +456,43 @@ const Dashboard = () => {
                       formatter={(value) => formatNumber(value)}
                     />
                     <Bar dataKey="installs" fill="#4285F4" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartCard>
+
+              {/* NEW: Top Apps by Reviews Chart */}
+              <ChartCard
+                title="Top 15 Apps by Reviews"
+                icon={<Users className="w-5 h-5" />}
+              >
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={topAppsByReviews} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis 
+                      type="number"
+                      stroke="#9CA3AF"
+                      fontSize={12}
+                      tick={{ fill: '#9CA3AF' }}
+                      tickFormatter={(value) => formatNumber(value)}
+                    />
+                    <YAxis 
+                      type="category"
+                      dataKey="name"
+                      stroke="#9CA3AF"
+                      fontSize={11}
+                      tick={{ fill: '#9CA3AF' }}
+                      width={150}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F1F1F', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                      itemStyle={{ color: '#fff' }}
+                      formatter={(value) => formatNumber(value)}
+                    />
+                    <Bar dataKey="reviews" fill="#F4B400" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartCard>
@@ -644,6 +689,57 @@ const Dashboard = () => {
               icon={<DollarSign className="w-5 h-5 text-google-blue" />}
               insight="Free apps dominate the market in both count and installs. Paid apps in the $1-5 range show the best balance between app count and user adoption."
             />
+          </>
+        )}
+
+        {/* Trends Tab */}
+        {activeTab === 'trends' && releaseYearDistribution.length > 0 && (
+          <>
+            <ChartCard
+              title="Apps Released by Year"
+              icon={<TrendingUp className="w-5 h-5" />}
+            >
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={releaseYearDistribution}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="year" 
+                    stroke="#9CA3AF"
+                    fontSize={12}
+                    tick={{ fill: '#9CA3AF' }}
+                  />
+                  <YAxis 
+                    stroke="#9CA3AF"
+                    fontSize={12}
+                    tick={{ fill: '#9CA3AF' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#1F1F1F', 
+                      border: '1px solid #374151',
+                      borderRadius: '8px'
+                    }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Bar dataKey="count" fill="#4285F4" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            {releaseYearDistribution.length > 0 && (
+              <div className="mt-8 grid md:grid-cols-2 gap-6">
+                <InsightCard
+                  title="Peak Release Year"
+                  icon={<Trophy className="w-5 h-5 text-google-green" />}
+                  insight={`The year ${releaseYearDistribution.reduce((max, item) => item.count > max.count ? item : max).year} had the most app releases with ${releaseYearDistribution.reduce((max, item) => item.count > max.count ? item : max).count.toLocaleString()} apps.`}
+                />
+                <InsightCard
+                  title="Market Growth Trend"
+                  icon={<TrendingUp className="w-5 h-5 text-google-blue" />}
+                  insight={`App releases span from ${releaseYearDistribution[0]?.year || 'N/A'} to ${releaseYearDistribution[releaseYearDistribution.length - 1]?.year || 'N/A'}, showing the evolution of the mobile app market over time.`}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
