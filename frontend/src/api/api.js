@@ -9,9 +9,29 @@ export const api = axios.create({
   },
 });
 
-export const getDashboardStats = async () => {
+const buildFilterQuery = (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.category && filters.category !== 'All') params.append('category', filters.category);
+  if (filters.type && filters.type !== 'All') params.append('type', filters.type);
+  if (filters.content_rating && filters.content_rating !== 'All') params.append('content_rating', filters.content_rating);
+  return params.toString();
+};
+
+export const getFilterOptions = async () => {
   try {
-    const response = await api.get('/dashboard/stats');
+    const response = await api.get('/filter-options');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching filter options:', error);
+    throw error;
+  }
+};
+
+export const getDashboardStats = async (filters = {}) => {
+  try {
+    const query = buildFilterQuery(filters);
+    const url = query ? `/dashboard/stats?${query}` : '/dashboard/stats';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
@@ -19,9 +39,11 @@ export const getDashboardStats = async () => {
   }
 };
 
-export const getCategoryAnalysis = async (category = 'All') => {
+export const getCategoryAnalysis = async (filters = {}) => {
   try {
-    const response = await api.get(`/category-analysis?category=${category}`);
+    const query = buildFilterQuery(filters);
+    const url = query ? `/category-analysis?${query}` : '/category-analysis';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching category analysis:', error);
@@ -29,9 +51,12 @@ export const getCategoryAnalysis = async (category = 'All') => {
   }
 };
 
-export const getTopApps = async (metric = 'installs', limit = 20) => {
+export const getTopApps = async (metric = 'installs', limit = 20, filters = {}) => {
   try {
-    const response = await api.get(`/top-apps?metric=${metric}&limit=${limit}`);
+    const query = buildFilterQuery(filters);
+    let url = `/top-apps?metric=${metric}&limit=${limit}`;
+    if (query) url += `&${query}`;
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching top apps:', error);
@@ -39,9 +64,36 @@ export const getTopApps = async (metric = 'installs', limit = 20) => {
   }
 };
 
-export const getRatingDistribution = async () => {
+export const getTopDevelopers = async (sortBy = 'installs', filters = {}) => {
   try {
-    const response = await api.get('/rating-distribution');
+    const query = buildFilterQuery(filters);
+    let url = `/top-developers?sortBy=${sortBy}`;
+    if (query) url += `&${query}`;
+    const response = await api.get(url);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching top developers:', error);
+    throw error;
+  }
+};
+
+export const getContentRatingDistribution = async (filters = {}) => {
+  try {
+    const query = buildFilterQuery(filters);
+    const url = query ? `/content-rating-distribution?${query}` : '/content-rating-distribution';
+    const response = await api.get(url);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching content rating distribution:', error);
+    throw error;
+  }
+};
+
+export const getRatingDistribution = async (filters = {}) => {
+  try {
+    const query = buildFilterQuery(filters);
+    const url = query ? `/rating-distribution?${query}` : '/rating-distribution';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching rating distribution:', error);
@@ -49,9 +101,11 @@ export const getRatingDistribution = async () => {
   }
 };
 
-export const getCorrelationAnalysis = async () => {
+export const getCorrelationAnalysis = async (filters = {}) => {
   try {
-    const response = await api.get('/correlation-analysis');
+    const query = buildFilterQuery(filters);
+    const url = query ? `/correlation-analysis?${query}` : '/correlation-analysis';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching correlation analysis:', error);
@@ -59,9 +113,11 @@ export const getCorrelationAnalysis = async () => {
   }
 };
 
-export const getPriceDistribution = async () => {
+export const getPriceDistribution = async (filters = {}) => {
   try {
-    const response = await api.get('/price-distribution');
+    const query = buildFilterQuery(filters);
+    const url = query ? `/price-distribution?${query}` : '/price-distribution';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching price distribution:', error);
@@ -69,9 +125,11 @@ export const getPriceDistribution = async () => {
   }
 };
 
-export const getInsights = async () => {
+export const getInsights = async (filters = {}) => {
   try {
-    const response = await api.get('/insights');
+    const query = buildFilterQuery(filters);
+    const url = query ? `/insights?${query}` : '/insights';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching insights:', error);
@@ -79,9 +137,11 @@ export const getInsights = async () => {
   }
 };
 
-export const getReleaseYearDistribution = async () => {
+export const getReleaseYearDistribution = async (filters = {}) => {
   try {
-    const response = await api.get('/release-year-distribution');
+    const query = buildFilterQuery(filters);
+    const url = query ? `/release-year-distribution?${query}` : '/release-year-distribution';
+    const response = await api.get(url);
     return response.data;
   } catch (error) {
     console.error('Error fetching release year distribution:', error);

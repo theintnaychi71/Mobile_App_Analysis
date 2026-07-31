@@ -96,7 +96,8 @@ SAMPLE_DATA = [
         "size_mb": 45.6,
         "price_usd": 0,
         "type": "Free",
-        "content_rating": "Everyone"
+        "content_rating": "Teen",
+        "developer": "Meta Platforms, Inc."
     },
     {
         "app_name": "Subway Surfers",
@@ -107,7 +108,8 @@ SAMPLE_DATA = [
         "size_mb": 85.6,
         "price_usd": 0,
         "type": "Free",
-        "content_rating": "Everyone"
+        "content_rating": "Everyone",
+        "developer": "SYBO Games"
     },
     {
         "app_name": "Minecraft",
@@ -118,7 +120,8 @@ SAMPLE_DATA = [
         "size_mb": 120.5,
         "price_usd": 6.99,
         "type": "Paid",
-        "content_rating": "Everyone 10+"
+        "content_rating": "Everyone 10+",
+        "developer": "Mojang"
     },
     {
         "app_name": "Duolingo",
@@ -129,7 +132,8 @@ SAMPLE_DATA = [
         "size_mb": 35.2,
         "price_usd": 0,
         "type": "Free",
-        "content_rating": "Everyone"
+        "content_rating": "Everyone",
+        "developer": "Duolingo"
     },
     {
         "app_name": "TikTok",
@@ -140,7 +144,128 @@ SAMPLE_DATA = [
         "size_mb": 150.0,
         "price_usd": 0,
         "type": "Free",
-        "content_rating": "Teen"
+        "content_rating": "Teen",
+        "developer": "ByteDance"
+    },
+    {
+        "app_name": "Clash of Clans",
+        "category_clean": "GAME",
+        "rating": 4.6,
+        "installs": 500000000,
+        "reviews": 5500000,
+        "size_mb": 145.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone 10+",
+        "developer": "Supercell"
+    },
+    {
+        "app_name": "Clash Royale",
+        "category_clean": "GAME",
+        "rating": 4.4,
+        "installs": 300000000,
+        "reviews": 3500000,
+        "size_mb": 130.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone 10+",
+        "developer": "Supercell"
+    },
+    {
+        "app_name": "Gmail",
+        "category_clean": "COMMUNICATION",
+        "rating": 4.3,
+        "installs": 5000000000,
+        "reviews": 15000000,
+        "size_mb": 25.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone",
+        "developer": "Google LLC"
+    },
+    {
+        "app_name": "YouTube",
+        "category_clean": "VIDEO_PLAYERS",
+        "rating": 4.1,
+        "installs": 10000000000,
+        "reviews": 120000000,
+        "size_mb": 55.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Teen",
+        "developer": "Google LLC"
+    },
+    {
+        "app_name": "Google Maps",
+        "category_clean": "TRAVEL_AND_LOCAL",
+        "rating": 4.2,
+        "installs": 8000000000,
+        "reviews": 30000000,
+        "size_mb": 50.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone",
+        "developer": "Google LLC"
+    },
+    {
+        "app_name": "WhatsApp",
+        "category_clean": "COMMUNICATION",
+        "rating": 4.0,
+        "installs": 10000000000,
+        "reviews": 180000000,
+        "size_mb": 40.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Teen",
+        "developer": "Meta Platforms, Inc."
+    },
+    {
+        "app_name": "Facebook",
+        "category_clean": "SOCIAL",
+        "rating": 3.8,
+        "installs": 8000000000,
+        "reviews": 150000000,
+        "size_mb": 70.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Teen",
+        "developer": "Meta Platforms, Inc."
+    },
+    {
+        "app_name": "Chrome Browser",
+        "category_clean": "COMMUNICATION",
+        "rating": 4.4,
+        "installs": 9000000000,
+        "reviews": 35000000,
+        "size_mb": 60.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone",
+        "developer": "Google LLC"
+    },
+    {
+        "app_name": "Hay Day",
+        "category_clean": "GAME",
+        "rating": 4.5,
+        "installs": 150000000,
+        "reviews": 2500000,
+        "size_mb": 110.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone",
+        "developer": "Supercell"
+    },
+    {
+        "app_name": "Brawl Stars",
+        "category_clean": "GAME",
+        "rating": 4.3,
+        "installs": 200000000,
+        "reviews": 4000000,
+        "size_mb": 175.0,
+        "price_usd": 0,
+        "type": "Free",
+        "content_rating": "Everyone 10+",
+        "developer": "Supercell"
     }
 ]
 
@@ -281,6 +406,49 @@ def get_all_data():
         logger.error(f"Error fetching data: {e}")
         return SAMPLE_DATA
 
+
+def apply_filters(data, filters):
+    """Apply filters (category, type, content_rating) to data.
+    filters is a dict with optional keys: category, type, content_rating.
+    """
+    filtered = data
+    category = filters.get('category')
+    app_type = filters.get('type')
+    content_rating = filters.get('content_rating')
+
+    if category and category.upper() != 'ALL':
+        filtered = [
+            d for d in filtered
+            if d.get('category_clean', '').upper() == category.upper()
+        ]
+
+    if app_type and app_type.upper() != 'ALL':
+        filtered = [
+            d for d in filtered
+            if d.get('type', 'Free').capitalize() == app_type.capitalize()
+        ]
+
+    if content_rating and content_rating.upper() != 'ALL':
+        filtered = [
+            d for d in filtered
+            if d.get('content_rating', 'Everyone').lower() == content_rating.lower()
+        ]
+
+    return filtered
+
+
+def get_unique_options():
+    """Get unique values for filter dropdowns."""
+    data = get_all_data()
+    categories = sorted(list(set([d.get('category_clean', 'Unknown') for d in data])))
+    content_ratings = sorted(list(set([d.get('content_rating', 'Everyone') for d in data])))
+    return {
+        'categories': categories,
+        'types': ['Free', 'Paid'],
+        'content_ratings': content_ratings
+    }
+
+
 # ============================================
 # API ENDPOINTS
 # ============================================
@@ -299,46 +467,51 @@ def health_check():
 @app.route('/api/dashboard/stats')
 def dashboard_stats():
     """Get main dashboard statistics"""
-    # Check cache first
-    cached = get_cached('dashboard_stats')
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'dashboard_stats{filter_suffix}'
+
+    cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data available'}), 404
-        
-        # Calculate statistics
+
         total_apps = len(data)
-        
+
         categories = {}
         free_count = 0
         total_installs = 0
         total_reviews = 0
-        
+
         for app in data:
             cat = app.get('category_clean', 'Unknown')
             categories[cat] = categories.get(cat, 0) + 1
-            
+
             if app.get('type', 'Free') == 'Free':
                 free_count += 1
-            
+
             total_installs += app.get('installs', 0)
             total_reviews += app.get('reviews', 0)
-        
-        # Average rating
+
         ratings = [app.get('rating', 0) for app in data if app.get('rating', 0) > 0]
         avg_rating = sum(ratings) / len(ratings) if ratings else 0
-        
-        # Top categories
+
         top_categories = sorted(
             [{'name': k, 'count': v} for k, v in categories.items()],
             key=lambda x: x['count'],
             reverse=True
         )[:10]
-        
+
         result = {
             'total_apps': total_apps,
             'total_categories': len(categories),
@@ -349,38 +522,147 @@ def dashboard_stats():
             'free_percentage': round((free_count / total_apps) * 100, 2) if total_apps > 0 else 0,
             'top_categories': top_categories
         }
-        
-        # Cache the result
-        set_cached('dashboard_stats', result)
-        
+
+        set_cached(cache_key, result)
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in dashboard_stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/filter-options')
+def filter_options():
+    """Get unique values for filter dropdowns."""
+    cached = get_cached('filter_options')
+    if cached:
+        return jsonify(cached)
+    options = get_unique_options()
+    set_cached('filter_options', options)
+    return jsonify(options)
+
+
+@app.route('/api/top-developers')
+def top_developers():
+    """Get top 10 developers by total installs or app count."""
+    sort_by = request.args.get('sortBy', 'installs')
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{sort_by}_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'top_developers{filter_suffix}'
+
+    cached = get_cached(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    try:
+        data = get_all_data()
+        data = apply_filters(data, filters)
+
+        if not data:
+            return jsonify({'error': 'No data found'}), 404
+
+        dev_stats = {}
+        for app in data:
+            dev = app.get('developer') or app.get('Developer') or 'Unknown'
+            if dev not in dev_stats:
+                dev_stats[dev] = {
+                    'developer': dev,
+                    'total_installs': 0,
+                    'app_count': 0,
+                    'total_reviews': 0
+                }
+            dev_stats[dev]['total_installs'] += app.get('installs', 0)
+            dev_stats[dev]['app_count'] += 1
+            dev_stats[dev]['total_reviews'] += app.get('reviews', 0)
+
+        dev_list = list(dev_stats.values())
+        sort_key = 'total_installs' if sort_by == 'installs' else 'app_count'
+        dev_list.sort(key=lambda x: x[sort_key], reverse=True)
+        top_10 = dev_list[:10]
+
+        for d in top_10:
+            d['avg_installs'] = round(d['total_installs'] / d['app_count']) if d['app_count'] > 0 else 0
+
+        set_cached(cache_key, top_10)
+        return jsonify(top_10)
+
+    except Exception as e:
+        logger.error(f"Error in top_developers: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/content-rating-distribution')
+def content_rating_distribution():
+    """Get distribution of apps by content rating."""
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'content_rating_distribution{filter_suffix}'
+
+    cached = get_cached(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    try:
+        data = get_all_data()
+        data = apply_filters(data, filters)
+
+        if not data:
+            return jsonify({'error': 'No data found'}), 404
+
+        rating_counts = {}
+        rating_installs = {}
+        for app in data:
+            cr = app.get('content_rating', 'Everyone') or 'Everyone'
+            rating_counts[cr] = rating_counts.get(cr, 0) + 1
+            rating_installs[cr] = rating_installs.get(cr, 0) + app.get('installs', 0)
+
+        result = [
+            {
+                'rating': k,
+                'count': rating_counts[k],
+                'total_installs': rating_installs.get(k, 0)
+            }
+            for k in rating_counts.keys()
+        ]
+        result.sort(key=lambda x: x['count'], reverse=True)
+
+        set_cached(cache_key, result)
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error in content_rating_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/category-analysis')
 def category_analysis():
     """Get category-wise analysis"""
-    category = request.args.get('category', 'All')
-    cache_key = f'category_analysis_{category}'
-    
-    # Check cache first
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'category_analysis{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
-        # Filter by category if specified
-        if category and category != 'All':
-            data = [d for d in data if d.get('category_clean', '').upper() == category.upper()]
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
-        # Group by category
+
         category_stats = {}
         for app in data:
             cat = app.get('category_clean', 'Unknown')
@@ -393,19 +675,18 @@ def category_analysis():
                     'free_count': 0,
                     'paid_count': 0
                 }
-            
+
             stats = category_stats[cat]
             stats['count'] += 1
             stats['total_rating'] += app.get('rating', 0)
             stats['total_installs'] += app.get('installs', 0)
             stats['total_reviews'] += app.get('reviews', 0)
-            
+
             if app.get('type', 'Free') == 'Free':
                 stats['free_count'] += 1
             else:
                 stats['paid_count'] += 1
-        
-        # Calculate averages
+
         result = []
         for cat, stats in category_stats.items():
             result.append({
@@ -420,14 +701,11 @@ def category_analysis():
                 'paid_count': stats['paid_count'],
                 'free_percentage': round((stats['free_count'] / stats['count']) * 100, 2) if stats['count'] > 0 else 0
             })
-        
+
         result = sorted(result, key=lambda x: x['count'], reverse=True)
-        
-        # Cache the result
         set_cached(cache_key, result)
-        
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in category_analysis: {e}")
         return jsonify({'error': str(e)}), 500
@@ -435,21 +713,27 @@ def category_analysis():
 @app.route('/api/top-apps')
 def top_apps():
     """Get top apps by various metrics"""
-    metric = request.args.get('metric', 'installs')  # installs, reviews, rating
+    metric = request.args.get('metric', 'installs')
     limit = int(request.args.get('limit', 20))
-    cache_key = f'top_apps_{metric}_{limit}'
-    
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{metric}_{limit}_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'top_apps{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
-        # Sort based on metric
+
         if metric == 'installs':
             sorted_data = sorted(data, key=lambda x: x.get('installs', 0), reverse=True)
         elif metric == 'reviews':
@@ -458,10 +742,9 @@ def top_apps():
             sorted_data = sorted(data, key=lambda x: x.get('rating', 0), reverse=True)
         else:
             sorted_data = sorted(data, key=lambda x: x.get('installs', 0), reverse=True)
-        
-        # Get top N
+
         top_apps = sorted_data[:limit]
-        
+
         result = []
         for app in top_apps:
             result.append({
@@ -471,12 +754,14 @@ def top_apps():
                 'installs': app.get('installs', 0),
                 'reviews': app.get('reviews', 0),
                 'type': app.get('type', 'Free'),
-                'price': app.get('price_usd', app.get('Price', 0))
+                'price': app.get('price_usd', app.get('Price', 0)),
+                'content_rating': app.get('content_rating', 'Everyone'),
+                'developer': app.get('developer') or app.get('Developer') or 'Unknown'
             })
-        
+
         set_cached(cache_key, result)
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in top_apps: {e}")
         return jsonify({'error': str(e)}), 500
@@ -484,19 +769,25 @@ def top_apps():
 @app.route('/api/rating-distribution')
 def rating_distribution():
     """Get rating distribution data"""
-    cache_key = 'rating_distribution'
-    
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'rating_distribution{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
-        # Create rating buckets
+
         rating_buckets = {
             '5.0': 0,
             '4.5-4.9': 0,
@@ -509,7 +800,7 @@ def rating_distribution():
             '1.0-1.4': 0,
             '0-0.9': 0
         }
-        
+
         for app in data:
             rating = app.get('rating', 0)
             if rating >= 5.0:
@@ -532,81 +823,82 @@ def rating_distribution():
                 rating_buckets['1.0-1.4'] += 1
             else:
                 rating_buckets['0-0.9'] += 1
-        
+
         result = [{'range': k, 'count': v} for k, v in rating_buckets.items()]
-        
         set_cached(cache_key, result)
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in rating_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/correlation-analysis')
 def correlation_analysis():
     """Get correlation analysis between different metrics"""
-    cache_key = 'correlation_analysis'
-    
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'correlation_analysis{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
-        # Extract data for correlation analysis
+
         ratings = []
         reviews = []
         installs = []
         prices = []
-        
+
         for app in data:
             rating = app.get('rating', 0)
             review = app.get('reviews', 0)
             install = app.get('installs', 0)
             price = app.get('price_usd', app.get('Price', 0))
-            
+
             if rating > 0 and review > 0:
                 ratings.append(rating)
                 reviews.append(review)
                 installs.append(install)
                 prices.append(price)
-        
-        # Calculate correlations (simplified)
+
         def calculate_correlation(x, y):
             n = len(x)
             if n < 2:
                 return 0
-            
             mean_x = sum(x) / n
             mean_y = sum(y) / n
-            
             numerator = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
             denominator = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) * sum((yi - mean_y) ** 2 for yi in y))
-            
             if denominator == 0:
                 return 0
             return numerator / denominator
-        
+
         correlation_rating_reviews = calculate_correlation(ratings, reviews)
         correlation_rating_installs = calculate_correlation(ratings, installs)
         correlation_reviews_installs = calculate_correlation(reviews, installs)
-        
-        # Create scatter plot data (sample 500 points for performance)
+
         scatter_data = []
         sample_size = min(500, len(ratings))
-        indices = random.sample(range(len(ratings)), sample_size)
-        
-        for i in indices:
-            scatter_data.append({
-                'rating': ratings[i],
-                'reviews': reviews[i],
-                'installs': installs[i]
-            })
-        
+        if sample_size > 0:
+            indices = random.sample(range(len(ratings)), sample_size)
+            for i in indices:
+                scatter_data.append({
+                    'rating': ratings[i],
+                    'reviews': reviews[i],
+                    'installs': installs[i]
+                })
+
         result = {
             'correlations': {
                 'rating_reviews': round(correlation_rating_reviews, 3),
@@ -617,30 +909,37 @@ def correlation_analysis():
             'sample_size': sample_size,
             'total_analyzed': len(ratings)
         }
-        
+
         set_cached(cache_key, result)
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in correlation_analysis: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/price-distribution')
 def price_distribution():
     """Get price distribution analysis"""
-    cache_key = 'price_distribution'
-    
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'price_distribution{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
-        # Create price buckets
+
         price_buckets = {
             'Free': 0,
             '$0.01-$0.99': 0,
@@ -649,7 +948,7 @@ def price_distribution():
             '$10.00-$19.99': 0,
             '$20.00+': 0
         }
-        
+
         total_installs_by_price = {
             'Free': 0,
             '$0.01-$0.99': 0,
@@ -658,11 +957,11 @@ def price_distribution():
             '$10.00-$19.99': 0,
             '$20.00+': 0
         }
-        
+
         for app in data:
             price = app.get('price_usd', app.get('Price', 0))
             installs = app.get('installs', 0)
-            
+
             if price <= 0:
                 price_buckets['Free'] += 1
                 total_installs_by_price['Free'] += installs
@@ -681,89 +980,99 @@ def price_distribution():
             else:
                 price_buckets['$20.00+'] += 1
                 total_installs_by_price['$20.00+'] += installs
-        
+
         result = {
             'app_count': [{'price': k, 'count': v} for k, v in price_buckets.items()],
             'install_distribution': [{'price': k, 'installs': v} for k, v in total_installs_by_price.items()]
         }
-        
+
         set_cached(cache_key, result)
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in price_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/release-year-distribution')
 def release_year_distribution():
     """Get release year distribution data"""
-    cache_key = 'release_year_distribution'
-    
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'release_year_distribution{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
-        # Extract release years
+
         year_counts = {}
         for app in data:
             released = app.get('released', app.get('Released', ''))
             if released:
-                # Try to extract year from various date formats
                 import re as _re
                 year_match = _re.search(r'\b(19|20)\d{2}\b', str(released))
                 if year_match:
                     year = year_match.group()
                     year_counts[year] = year_counts.get(year, 0) + 1
-        
-        # Sort by year
+
         sorted_years = sorted(year_counts.items(), key=lambda x: x[0])
-        
         result = [{'year': k, 'count': v} for k, v in sorted_years]
-        
+
         set_cached(cache_key, result)
         return jsonify(result)
-    
+
     except Exception as e:
         logger.error(f"Error in release_year_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/api/insights')
 def insights():
     """Get key insights from the data"""
-    cache_key = 'insights'
-    
+    filters = {
+        'category': request.args.get('category'),
+        'type': request.args.get('type'),
+        'content_rating': request.args.get('content_rating')
+    }
+    filter_suffix = f"_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cache_key = f'insights{filter_suffix}'
+
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
-    
+
     try:
         data = get_all_data()
-        
+        data = apply_filters(data, filters)
+
         if not data:
             return jsonify({'error': 'No data found'}), 404
-        
+
         insights = []
-        
-        # Category dominance
+
         categories = {}
         for app in data:
             cat = app.get('category_clean', 'Unknown')
             categories[cat] = categories.get(cat, 0) + 1
-        
+
         top_category = max(categories.items(), key=lambda x: x[1])
         insights.append({
             'type': 'category_dominance',
             'title': 'Market Dominance',
             'message': f"The '{top_category[0]}' category dominates with {top_category[1]} apps ({round((top_category[1]/len(data))*100, 1)}% of total)"
         })
-        
-        # Rating analysis
+
         ratings = [app.get('rating', 0) for app in data if app.get('rating', 0) > 0]
         if ratings:
             avg_rating = sum(ratings) / len(ratings)
@@ -772,8 +1081,7 @@ def insights():
                 'title': 'User Satisfaction',
                 'message': f"Average app rating is {avg_rating:.2f}/5.0, indicating generally positive user sentiment"
             })
-        
-        # Free vs Paid
+
         free_count = sum(1 for app in data if app.get('type', 'Free') == 'Free')
         free_percentage = (free_count / len(data)) * 100
         insights.append({
@@ -781,8 +1089,7 @@ def insights():
             'title': 'Monetization Model',
             'message': f"{free_percentage:.1f}% of apps are free, confirming the freemium model dominance"
         })
-        
-        # Install analysis
+
         total_installs = sum(app.get('installs', 0) for app in data)
         avg_installs = total_installs / len(data) if len(data) > 0 else 0
         insights.append({
@@ -790,10 +1097,10 @@ def insights():
             'title': 'Market Reach',
             'message': f"Total installs across all apps: {total_installs:,} (Average: {avg_installs:,.0f} per app)"
         })
-        
+
         set_cached(cache_key, insights)
         return jsonify(insights)
-    
+
     except Exception as e:
         logger.error(f"Error in insights: {e}")
         return jsonify({'error': str(e)}), 500
@@ -815,10 +1122,13 @@ if __name__ == '__main__':
     print("=" * 50)
     print("\n📋 Available endpoints:")
     print("  GET /health")
+    print("  GET /api/filter-options")
     print("  GET /api/dashboard/stats")
     print("  GET /api/category-analysis")
     print("  GET /api/top-apps")
+    print("  GET /api/top-developers")
     print("  GET /api/rating-distribution")
+    print("  GET /api/content-rating-distribution")
     print("  GET /api/correlation-analysis")
     print("  GET /api/price-distribution")
     print("  GET /api/release-year-distribution")
