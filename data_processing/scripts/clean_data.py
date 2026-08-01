@@ -4,15 +4,17 @@ import re
 
 print(" Starting Final Data Cleaning Pipeline...")
 
-# Use your specific file path
-input_file = r'D:\MobileAppAnalysis\data\processed\clean_dataset.csv'
-output_file = r'D:\MobileAppAnalysis\data\processed\clean_dataset_final.csv'
+# ──────────────────────────────────────────────
+# File Paths (Updated for Mac Relative Paths)
+# ──────────────────────────────────────────────
+input_file = 'data/processed/google_play_dataset.csv'
+output_file = 'data/processed/clean_dataset.csv'
 
 try:
     df = pd.read_csv(input_file)
-    print(f"✅ Loaded {len(df)} rows from clean_dataset.csv")
+    print(f"✅ Loaded {len(df)} rows from {input_file}")
 except FileNotFoundError:
-    print(f"❌ Error: Could not find '{input_file}'.")
+    print(f"❌ Error: Could not find '{input_file}'. Please check file location.")
     exit()
 
 # 1. Remove duplicates
@@ -83,7 +85,8 @@ print(f"  ✅ Dataset after date cleanup: {len(df)} rows")
 df["Category"] = df["Category"].fillna("Unknown").str.strip()
 df["Developer"] = df["Developer"].fillna("Unknown Developer").str.strip()
 df["Free"] = df["Free"].fillna(False)
-df["In-App Purchases"] = df["In-App Purchases"].fillna(False)
+if "In-App Purchases" in df.columns:
+    df["In-App Purchases"] = df["In-App Purchases"].fillna(False)
 
 # 7. Feature Engineering
 df["App_Age_Days"] = (df["Last Updated"] - df["Released"]).dt.days
@@ -110,7 +113,7 @@ df["Popularity_Tier"] = df["Installs"].apply(get_popularity_tier)
 columns_to_drop = ["Description", "Summary", "Size", "Min Android", "Content Rating", "Size_MB"]
 df = df.drop(columns=[col for col in columns_to_drop if col in df.columns])
 
-# 9. Save
+# 9. Save Cleaned Dataset
 df.to_csv(output_file, index=False, encoding="utf-8")
 
 print("\n" + "="*50)

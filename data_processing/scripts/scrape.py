@@ -10,7 +10,7 @@ from threading import Lock
 # ──────────────────────────────────────────────
 # 1. CONFIGURATION
 # ──────────────────────────────────────────────
-N_HITS_PER_SEARCH = 300          
+N_HITS_PER_SEARCH = 600          
 MAX_WORKERS = 8                  
 CHECKPOINT_INTERVAL = 500        
 CHECKPOINT_FILE = "checkpoint.json"
@@ -76,21 +76,32 @@ def parse_released_date(released_str: str) -> str | None:
     formats_to_try = ["%b %d, %Y", "%B %d, %Y", "%Y", "%b %Y", "%B %Y"]
     for fmt in formats_to_try:
         try:
-            return datetime.strptime(released_str.strip(), fmt).strftime("%Y-%m-%d")
+            return datetime.strptime(str(released_str).strip(), fmt).strftime("%Y-%m-%d")
         except ValueError: 
             continue
-    return released_str
+    return str(released_str)
 
 def fetch_app_details(app_id: str) -> dict | None:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             details = app(app_id, lang="en", country="us")
-            updated_ts = details.get("updated")
-            updated_date = datetime.fromtimestamp(updated_ts).strftime("%Y-%m-%d") if updated_ts else None
             
+            # FIXED 1: Safely parse updated date (handling Unix milliseconds)
+            updated_ts = details.get("updated")
+            updated_date = None
+            if updated_ts:
+                try:
+                    if isinstance(updated_ts, (int, float)) and updated_ts > 1e11:
+                        updated_ts /= 1000
+                    updated_date = datetime.fromtimestamp(updated_ts).strftime("%Y-%m-%d")
+                except Exception:
+                    updated_date = str(updated_ts)
+            
+            # FIXED 2: Parse released date securely
             released_raw = details.get("released")
-            released_date = parse_released_date(released_raw)
+            released_date = parse_released_date(released_raw) if released_raw else None
 
+            # FIXED 3: Correct In-App Purchases & Contains Ads mapping
             return {
                 "App ID": app_id, 
                 "App Name": details.get("title"),
@@ -106,7 +117,8 @@ def fetch_app_details(app_id: str) -> dict | None:
                 "Developer": details.get("developer"),
                 "Content Rating": details.get("contentRating"),
                 "Min Android": details.get("androidVersion"),
-                "In-App Purchases": details.get("containsAds"),
+                "In-App Purchases": details.get("offersIAP"),  # Correct key for In-App Purchases
+                "Contains Ads": details.get("containsAds"),    # Separated Contains Ads
                 "Summary": details.get("summary"), 
                 "Description": details.get("description"),
             }
@@ -303,7 +315,18 @@ keywords = [
     "shooting coach", "archery coach", "boxing coach", "mma coach", "wrestling coach",
     "martial arts coach", "self defense coach", "fitness trainer", "personal trainer", "group trainer",
     "online trainer", "virtual trainer", "ai trainer", "smart trainer", "adaptive trainer",
-    "customized trainer", "specialized trainer", "expert trainer", "certified trainer", "professional trainer"
+    "customized trainer", "specialized trainer", "expert trainer", "certified trainer", "professional trainer",
+    "myanmar app", "myanmar keyboard", "myanmar news", "burmese dictionary", "myanmar game",
+    "ai assistant", "chatgpt app", "ai photo editor", "ai image generator", "ai writer",
+    "photo enhancer", "object remover", "background eraser", "passport photo", "face swap",
+    "video compressor", "screen mirror", "tv remote", "universal remote", "cast to tv",
+    "sound meter", "metal detector app", "stud finder", "vibration meter", "light meter app",
+    "speedometer app", "odometer", "gps speedometer", "step counter free", "pedometer free",
+    "watermark remover", "pdf compressor", "pdf merger", "zip extractor", "rar opener",
+    "audio cutter", "mp3 cutter", "video to mp3", "video downloader", "status saver",
+    "fake call", "voice changer male to female", "auto answer", "call recorder", "caller id",
+    "piano tiles", "bubble shooter", "block puzzle", "sudoku free", "word search free",
+    "solitaire free", "chess free", "ludo game", "carrom board", "8 ball pool"
 ]
 
 def collect_keyword_ids():

@@ -35,7 +35,6 @@ const Dashboard = () => {
       setLoading(true);
       setError(null);
       
-      // Load essential data first (stats and category data)
       const [statsData, categoryAnalysis] = await Promise.all([
         getDashboardStats(),
         getCategoryAnalysis()
@@ -44,7 +43,6 @@ const Dashboard = () => {
       setStats(statsData);
       setCategoryData(categoryAnalysis);
       
-      // Load detailed data in background after essential data is loaded
       setTimeout(async () => {
         try {
           const [
@@ -112,7 +110,7 @@ const Dashboard = () => {
             </button>
           </div>
           <p className="text-gray-400 text-sm">
-            Make sure the Flask API is running on http://localhost:5000
+            Make sure the Flask API is running on http://localhost:5001
           </p>
         </div>
       </div>
@@ -124,21 +122,23 @@ const Dashboard = () => {
     { name: 'Paid', value: stats.total_apps - stats.free_apps, color: '#4285F4' }
   ];
 
+  // ✅ FIX: API Data မလာသေးချိန် နောက်ခံ Data တွက်ချက်မှု မပြဘဲ API Response သို့မဟုတ် Excel Pivot တန်ဖိုး သုံးရန်
   const ratingDistChart = ratingDistribution.length > 0 ? ratingDistribution : [
-    { range: '5.0', count: Math.floor(stats.total_apps * 0.15) },
-    { range: '4.0-4.9', count: Math.floor(stats.total_apps * 0.35) },
-    { range: '3.0-3.9', count: Math.floor(stats.total_apps * 0.25) },
-    { range: '2.0-2.9', count: Math.floor(stats.total_apps * 0.15) },
-    { range: '1.0-1.9', count: Math.floor(stats.total_apps * 0.07) },
-    { range: '0-0.9', count: Math.floor(stats.total_apps * 0.03) }
+    { range: '5.0', count: 0 },
+    { range: '4.0-4.9', count: 0 },
+    { range: '3.0-3.9', count: 0 },
+    { range: '2.0-2.9', count: 0 },
+    { range: '1.0-1.9', count: 0 },
+    { range: '0-0.9', count: 0 }
   ];
 
+  // ✅ FIX: Excel Pivot Table ထဲက တကယ့် Data အရေအတွက် အမှန်များ
   const installTiers = [
-    { tier: '10M+', count: Math.floor(stats.total_apps * 0.05) },
-    { tier: '1M-10M', count: Math.floor(stats.total_apps * 0.15) },
-    { tier: '100K-1M', count: Math.floor(stats.total_apps * 0.25) },
-    { tier: '10K-100K', count: Math.floor(stats.total_apps * 0.30) },
-    { tier: '<10K', count: Math.floor(stats.total_apps * 0.25) }
+    { tier: '10M+', count: 1487 },
+    { tier: '1M-10M', count: 1799 },
+    { tier: '100K-1M', count: 2061 },
+    { tier: '10K-100K', count: 3832 },
+    { tier: '<10K', count: 1440 }
   ];
 
   return (
@@ -213,23 +213,30 @@ const Dashboard = () => {
           <>
             {/* Charts Row 1 */}
             <div className="grid lg:grid-cols-2 gap-6 mb-8">
-              {/* Category Distribution */}
+              {/* Top Categories by App Count */}
               <ChartCard
                 title="Top Categories by App Count"
                 icon={<BarChart3 className="w-5 h-5" />}
               >
-                <ResponsiveContainer width="100%" height={350}>
-                  <BarChart data={stats.top_categories.slice(0, 10)}>
+                <ResponsiveContainer width="100%" height={380}>
+                  <BarChart 
+                    data={stats.top_categories.slice(0, 10)}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 45 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis 
                       dataKey="name" 
                       stroke="#9CA3AF"
-                      fontSize={12}
+                      fontSize={10}
                       tick={{ fill: '#9CA3AF' }}
+                      interval={0}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
                     />
                     <YAxis 
                       stroke="#9CA3AF"
-                      fontSize={12}
+                      fontSize={11}
                       tick={{ fill: '#9CA3AF' }}
                     />
                     <Tooltip 
@@ -250,7 +257,7 @@ const Dashboard = () => {
                 title="Free vs Paid Apps Distribution"
                 icon={<PieChart className="w-5 h-5" />}
               >
-                <ResponsiveContainer width="100%" height={350}>
+                <ResponsiveContainer width="100%" height={380}>
                   <RechartsPieChart>
                     <Pie
                       data={pieData}
@@ -343,7 +350,7 @@ const Dashboard = () => {
                       stroke="#9CA3AF"
                       fontSize={12}
                       tick={{ fill: '#9CA3AF' }}
-                      width={60}
+                      width={80}
                     />
                     <Tooltip 
                       contentStyle={{ 
@@ -358,42 +365,6 @@ const Dashboard = () => {
                 </ResponsiveContainer>
               </ChartCard>
             </div>
-
-            {/* Category Analysis Table */}
-            <ChartCard
-              title="Category Analysis"
-              icon={<Activity className="w-5 h-5" />}
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">Category</th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Apps</th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Avg Rating</th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Total Installs</th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Avg Installs</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {categoryData.slice(0, 10).map((cat, index) => (
-                      <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
-                        <td className="py-3 px-4 font-medium">{cat.category}</td>
-                        <td className="text-right py-3 px-4 text-gray-400">{cat.count.toLocaleString()}</td>
-                        <td className="text-right py-3 px-4">
-                          <span className="inline-flex items-center">
-                            <Star className="w-4 h-4 text-google-yellow mr-1" />
-                            {cat.avg_rating}
-                          </span>
-                        </td>
-                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(cat.total_installs)}</td>
-                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(cat.avg_installs)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </ChartCard>
 
             {/* Insights Section */}
             <div className="mt-8 grid md:grid-cols-2 gap-6">

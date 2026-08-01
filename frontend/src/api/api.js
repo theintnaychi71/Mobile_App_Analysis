@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,7 +81,7 @@ export const getInsights = async () => {
 
 export const healthCheck = async () => {
   try {
-    const response = await axios.get('http://localhost:5000/health');
+    const response = await axios.get('http://localhost:5001/health');
     return response.data;
   } catch (error) {
     console.error('Health check failed:', error);

@@ -49,7 +49,7 @@ app.config['MONGO_COLLECTION'] = os.environ.get('MONGO_COLLECTION', 'apps')
 # Simple in-memory cache
 _cache = {}
 _cache_timestamps = {}
-CACHE_DURATION = 600  # 10 minutes (increased from 5)
+CACHE_DURATION = 600  # 10 minutes
 
 def get_cached(key):
     """Get value from cache if not expired"""
@@ -75,7 +75,7 @@ if not app.config['MONGO_URI']:
 else:
     app.config['USE_SAMPLE_DATA'] = False
 
-# Enable CORS for Streamlit dashboard
+# Enable CORS for Streamlit / React dashboard
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # Initialize MongoDB (if URI exists)
@@ -100,7 +100,7 @@ SAMPLE_DATA = [
     },
     {
         "app_name": "Subway Surfers",
-        "category_clean": "GAME",
+        "category_clean": "Games",
         "rating": 4.3,
         "installs": 500000000,
         "reviews": 2000000,
@@ -111,7 +111,7 @@ SAMPLE_DATA = [
     },
     {
         "app_name": "Minecraft",
-        "category_clean": "GAME",
+        "category_clean": "Games",
         "rating": 4.8,
         "installs": 200000000,
         "reviews": 3000000,
@@ -144,36 +144,35 @@ SAMPLE_DATA = [
     }
 ]
 
+# Set of game sub-genres to consolidate into single 'Games' category
+GAME_GENRES = {
+    'Action', 'Adventure', 'Arcade', 'Board', 'Card', 'Casino', 
+    'Casual', 'Educational', 'Music', 'Puzzle', 'Racing', 
+    'Role Playing', 'Simulation', 'Sports', 'Strategy', 'Trivia', 'Word'
+}
+
 # ============================================
 # DATABASE HELPERS
 # ============================================
 
 def _normalize_doc(doc):
-    """Map MongoDB field names (from clean_dataset.csv columns) to the
-    SAMPLE_DATA-style names that dashboard_stats() and other endpoints expect.
-
-    MongoDB actual fields (from uploaded clean_dataset.csv via transformer.py):
-      App Name, Category, Rating, Reviews, Installs, Free, Price, Released,
-      Last Updated, Developer, In-App Purchases, Price_Tier, Popularity_Tier
-
-    Expected by API code (SAMPLE_DATA naming):
-      app_name, category_clean, rating, reviews, installs, type, price_usd,
-      released, last_updated, developer, content_rating
-    """
-    # Work on a copy so original dict isn't mutated
+    """Map MongoDB field names to SAMPLE_DATA-style names 
+    and consolidate game categories into 'Games'."""
     d = dict(doc)
 
-    # 1. Category: Category -> category_clean
-    if 'category_clean' not in d or not d['category_clean']:
-        cat = d.get('Category')
-        if cat:
-            d['category_clean'] = cat
-        elif 'category' in d and d['category']:
-            d['category_clean'] = d['category']
+    # 1. Category Mapping & Games Consolidation
+    cat = d.get('Category') or d.get('category') or d.get('category_clean')
+    if cat:
+        clean_cat = str(cat).strip()
+        # Check if category belongs to game genres or starts with 'GAME'
+        if clean_cat in GAME_GENRES or clean_cat.upper().startswith('GAME'):
+            d['category_clean'] = 'Games'
         else:
-            d.setdefault('category_clean', 'Unknown')
+            d['category_clean'] = clean_cat
+    else:
+        d.setdefault('category_clean', 'Unknown')
 
-    # 2. Rating: Rating (float) -> rating
+    # 2. Rating
     if 'rating' not in d or d.get('rating') in (None, 0):
         rating_val = d.get('Rating')
         if isinstance(rating_val, (int, float)):
@@ -181,7 +180,7 @@ def _normalize_doc(doc):
         elif 'rating' not in d:
             d['rating'] = 0.0
 
-    # 3. Installs: Installs (int) -> installs
+    # 3. Installs
     if 'installs' not in d or d.get('installs') in (None, 0):
         inst_val = d.get('Installs')
         if isinstance(inst_val, (int, float)):
@@ -193,7 +192,7 @@ def _normalize_doc(doc):
         elif 'installs' not in d:
             d['installs'] = 0
 
-    # 4. Free/Paid Type: Free (TRUE/FALSE) or Price_Tier -> type ("Free"/"Paid")
+    # 4. Free/Paid Type
     if 'type' not in d or not d['type']:
         is_free = False
         free_field = d.get('Free')
@@ -202,7 +201,6 @@ def _normalize_doc(doc):
         elif free_field is False or free_field in ('FALSE', 'False', 'false', '0', 0):
             is_free = False
         else:
-            # Fallback: use Price or Price_Tier
             price_val = d.get('Price', d.get('price_usd', 0))
             tier = d.get('Price_Tier')
             if tier and str(tier).lower() == 'free':
@@ -211,7 +209,7 @@ def _normalize_doc(doc):
                 is_free = True
         d['type'] = 'Free' if is_free else 'Paid'
 
-    # Extra aliases (not strictly needed by current endpoints, but for completeness)
+    # Extra aliases for full functionality
     if 'app_name' not in d:
         if 'App Name' in d: d['app_name'] = d['App Name']
     if 'reviews' not in d:
@@ -227,17 +225,15 @@ def _normalize_doc(doc):
     if 'developer' not in d and 'Developer' in d:
         d['developer'] = d['Developer']
     if 'content_rating' not in d:
-        # Not present in clean_dataset.csv; set reasonable default
         d.setdefault('content_rating', 'Everyone')
 
     return d
 
 
 def get_all_data():
-    """Get all data (from MongoDB or sample) and normalize field names to
-    match what the dashboard API logic expects."""
+    """Get all data from Mongo/Sample and normalize field names."""
     if app.config['USE_SAMPLE_DATA']:
-        return SAMPLE_DATA
+        return [_normalize_doc(doc) for doc in SAMPLE_DATA]
     
     try:
         db_name = app.config.get('MONGO_DB')
@@ -250,7 +246,6 @@ def get_all_data():
 
         collection = db[collection_name]
         
-        # Only fetch necessary fields to reduce data transfer
         projection = {
             '_id': 0,
             'App Name': 1,
@@ -271,15 +266,14 @@ def get_all_data():
         raw_data = list(collection.find({}, projection))
 
         if not raw_data:
-            return SAMPLE_DATA
+            return [_normalize_doc(doc) for doc in SAMPLE_DATA]
 
-        # Normalize every document's field names so dashboard_stats() finds the keys it expects
         data = [_normalize_doc(doc) for doc in raw_data]
         return data
 
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
-        return SAMPLE_DATA
+        return [_normalize_doc(doc) for doc in SAMPLE_DATA]
 
 # ============================================
 # API ENDPOINTS
@@ -299,40 +293,34 @@ def health_check():
 @app.route('/api/dashboard/stats')
 def dashboard_stats():
     """Get main dashboard statistics"""
-    # Check cache first
     cached = get_cached('dashboard_stats')
     if cached:
         return jsonify(cached)
     
     try:
         data = get_all_data()
-        
         if not data:
             return jsonify({'error': 'No data available'}), 404
         
-        # Calculate statistics
         total_apps = len(data)
-        
         categories = {}
         free_count = 0
         total_installs = 0
         total_reviews = 0
         
-        for app in data:
-            cat = app.get('category_clean', 'Unknown')
+        for app_doc in data:
+            cat = app_doc.get('category_clean', 'Unknown')
             categories[cat] = categories.get(cat, 0) + 1
             
-            if app.get('type', 'Free') == 'Free':
+            if app_doc.get('type', 'Free') == 'Free':
                 free_count += 1
             
-            total_installs += app.get('installs', 0)
-            total_reviews += app.get('reviews', 0)
+            total_installs += app_doc.get('installs', 0)
+            total_reviews += app_doc.get('reviews', 0)
         
-        # Average rating
-        ratings = [app.get('rating', 0) for app in data if app.get('rating', 0) > 0]
+        ratings = [app_doc.get('rating', 0) for app_doc in data if app_doc.get('rating', 0) > 0]
         avg_rating = sum(ratings) / len(ratings) if ratings else 0
         
-        # Top categories
         top_categories = sorted(
             [{'name': k, 'count': v} for k, v in categories.items()],
             key=lambda x: x['count'],
@@ -350,9 +338,7 @@ def dashboard_stats():
             'top_categories': top_categories
         }
         
-        # Cache the result
         set_cached('dashboard_stats', result)
-        
         return jsonify(result)
     
     except Exception as e:
@@ -365,7 +351,6 @@ def category_analysis():
     category = request.args.get('category', 'All')
     cache_key = f'category_analysis_{category}'
     
-    # Check cache first
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
@@ -373,17 +358,15 @@ def category_analysis():
     try:
         data = get_all_data()
         
-        # Filter by category if specified
         if category and category != 'All':
             data = [d for d in data if d.get('category_clean', '').upper() == category.upper()]
         
         if not data:
             return jsonify({'error': 'No data found'}), 404
         
-        # Group by category
         category_stats = {}
-        for app in data:
-            cat = app.get('category_clean', 'Unknown')
+        for app_doc in data:
+            cat = app_doc.get('category_clean', 'Unknown')
             if cat not in category_stats:
                 category_stats[cat] = {
                     'count': 0,
@@ -396,16 +379,15 @@ def category_analysis():
             
             stats = category_stats[cat]
             stats['count'] += 1
-            stats['total_rating'] += app.get('rating', 0)
-            stats['total_installs'] += app.get('installs', 0)
-            stats['total_reviews'] += app.get('reviews', 0)
+            stats['total_rating'] += app_doc.get('rating', 0)
+            stats['total_installs'] += app_doc.get('installs', 0)
+            stats['total_reviews'] += app_doc.get('reviews', 0)
             
-            if app.get('type', 'Free') == 'Free':
+            if app_doc.get('type', 'Free') == 'Free':
                 stats['free_count'] += 1
             else:
                 stats['paid_count'] += 1
         
-        # Calculate averages
         result = []
         for cat, stats in category_stats.items():
             result.append({
@@ -423,9 +405,7 @@ def category_analysis():
         
         result = sorted(result, key=lambda x: x['count'], reverse=True)
         
-        # Cache the result
         set_cached(cache_key, result)
-        
         return jsonify(result)
     
     except Exception as e:
@@ -435,7 +415,7 @@ def category_analysis():
 @app.route('/api/top-apps')
 def top_apps():
     """Get top apps by various metrics"""
-    metric = request.args.get('metric', 'installs')  # installs, reviews, rating
+    metric = request.args.get('metric', 'installs')
     limit = int(request.args.get('limit', 20))
     cache_key = f'top_apps_{metric}_{limit}'
     
@@ -445,11 +425,9 @@ def top_apps():
     
     try:
         data = get_all_data()
-        
         if not data:
             return jsonify({'error': 'No data found'}), 404
         
-        # Sort based on metric
         if metric == 'installs':
             sorted_data = sorted(data, key=lambda x: x.get('installs', 0), reverse=True)
         elif metric == 'reviews':
@@ -459,19 +437,18 @@ def top_apps():
         else:
             sorted_data = sorted(data, key=lambda x: x.get('installs', 0), reverse=True)
         
-        # Get top N
-        top_apps = sorted_data[:limit]
+        top_selected = sorted_data[:limit]
         
         result = []
-        for app in top_apps:
+        for app_doc in top_selected:
             result.append({
-                'name': app.get('app_name', app.get('App Name', 'Unknown')),
-                'category': app.get('category_clean', app.get('Category', 'Unknown')),
-                'rating': app.get('rating', 0),
-                'installs': app.get('installs', 0),
-                'reviews': app.get('reviews', 0),
-                'type': app.get('type', 'Free'),
-                'price': app.get('price_usd', app.get('Price', 0))
+                'name': app_doc.get('app_name', app_doc.get('App Name', 'Unknown')),
+                'category': app_doc.get('category_clean', app_doc.get('Category', 'Unknown')),
+                'rating': app_doc.get('rating', 0),
+                'installs': app_doc.get('installs', 0),
+                'reviews': app_doc.get('reviews', 0),
+                'type': app_doc.get('type', 'Free'),
+                'price': app_doc.get('price_usd', app_doc.get('Price', 0))
             })
         
         set_cached(cache_key, result)
@@ -492,46 +469,27 @@ def rating_distribution():
     
     try:
         data = get_all_data()
-        
         if not data:
             return jsonify({'error': 'No data found'}), 404
         
-        # Create rating buckets
         rating_buckets = {
-            '5.0': 0,
-            '4.5-4.9': 0,
-            '4.0-4.4': 0,
-            '3.5-3.9': 0,
-            '3.0-3.4': 0,
-            '2.5-2.9': 0,
-            '2.0-2.4': 0,
-            '1.5-1.9': 0,
-            '1.0-1.4': 0,
-            '0-0.9': 0
+            '5.0': 0, '4.5-4.9': 0, '4.0-4.4': 0, '3.5-3.9': 0,
+            '3.0-3.4': 0, '2.5-2.9': 0, '2.0-2.4': 0, '1.5-1.9': 0,
+            '1.0-1.4': 0, '0-0.9': 0
         }
         
-        for app in data:
-            rating = app.get('rating', 0)
-            if rating >= 5.0:
-                rating_buckets['5.0'] += 1
-            elif rating >= 4.5:
-                rating_buckets['4.5-4.9'] += 1
-            elif rating >= 4.0:
-                rating_buckets['4.0-4.4'] += 1
-            elif rating >= 3.5:
-                rating_buckets['3.5-3.9'] += 1
-            elif rating >= 3.0:
-                rating_buckets['3.0-3.4'] += 1
-            elif rating >= 2.5:
-                rating_buckets['2.5-2.9'] += 1
-            elif rating >= 2.0:
-                rating_buckets['2.0-2.4'] += 1
-            elif rating >= 1.5:
-                rating_buckets['1.5-1.9'] += 1
-            elif rating >= 1.0:
-                rating_buckets['1.0-1.4'] += 1
-            else:
-                rating_buckets['0-0.9'] += 1
+        for app_doc in data:
+            rating = app_doc.get('rating', 0)
+            if rating >= 5.0: rating_buckets['5.0'] += 1
+            elif rating >= 4.5: rating_buckets['4.5-4.9'] += 1
+            elif rating >= 4.0: rating_buckets['4.0-4.4'] += 1
+            elif rating >= 3.5: rating_buckets['3.5-3.9'] += 1
+            elif rating >= 3.0: rating_buckets['3.0-3.4'] += 1
+            elif rating >= 2.5: rating_buckets['2.5-2.9'] += 1
+            elif rating >= 2.0: rating_buckets['2.0-2.4'] += 1
+            elif rating >= 1.5: rating_buckets['1.5-1.9'] += 1
+            elif rating >= 1.0: rating_buckets['1.0-1.4'] += 1
+            else: rating_buckets['0-0.9'] += 1
         
         result = [{'range': k, 'count': v} for k, v in rating_buckets.items()]
         
@@ -553,21 +511,16 @@ def correlation_analysis():
     
     try:
         data = get_all_data()
-        
         if not data:
             return jsonify({'error': 'No data found'}), 404
         
-        # Extract data for correlation analysis
-        ratings = []
-        reviews = []
-        installs = []
-        prices = []
+        ratings, reviews, installs, prices = [], [], [], []
         
-        for app in data:
-            rating = app.get('rating', 0)
-            review = app.get('reviews', 0)
-            install = app.get('installs', 0)
-            price = app.get('price_usd', app.get('Price', 0))
+        for app_doc in data:
+            rating = app_doc.get('rating', 0)
+            review = app_doc.get('reviews', 0)
+            install = app_doc.get('installs', 0)
+            price = app_doc.get('price_usd', app_doc.get('Price', 0))
             
             if rating > 0 and review > 0:
                 ratings.append(rating)
@@ -575,43 +528,31 @@ def correlation_analysis():
                 installs.append(install)
                 prices.append(price)
         
-        # Calculate correlations (simplified)
         def calculate_correlation(x, y):
             n = len(x)
-            if n < 2:
-                return 0
-            
+            if n < 2: return 0
             mean_x = sum(x) / n
             mean_y = sum(y) / n
-            
             numerator = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
             denominator = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) * sum((yi - mean_y) ** 2 for yi in y))
-            
-            if denominator == 0:
-                return 0
-            return numerator / denominator
+            return numerator / denominator if denominator != 0 else 0
         
-        correlation_rating_reviews = calculate_correlation(ratings, reviews)
-        correlation_rating_installs = calculate_correlation(ratings, installs)
-        correlation_reviews_installs = calculate_correlation(reviews, installs)
-        
-        # Create scatter plot data (sample 500 points for performance)
         scatter_data = []
         sample_size = min(500, len(ratings))
-        indices = random.sample(range(len(ratings)), sample_size)
-        
-        for i in indices:
-            scatter_data.append({
-                'rating': ratings[i],
-                'reviews': reviews[i],
-                'installs': installs[i]
-            })
+        if sample_size > 0:
+            indices = random.sample(range(len(ratings)), sample_size)
+            for i in indices:
+                scatter_data.append({
+                    'rating': ratings[i],
+                    'reviews': reviews[i],
+                    'installs': installs[i]
+                })
         
         result = {
             'correlations': {
-                'rating_reviews': round(correlation_rating_reviews, 3),
-                'rating_installs': round(correlation_rating_installs, 3),
-                'reviews_installs': round(correlation_reviews_installs, 3)
+                'rating_reviews': round(calculate_correlation(ratings, reviews), 3),
+                'rating_installs': round(calculate_correlation(ratings, installs), 3),
+                'reviews_installs': round(calculate_correlation(reviews, installs), 3)
             },
             'scatter_data': scatter_data,
             'sample_size': sample_size,
@@ -636,32 +577,22 @@ def price_distribution():
     
     try:
         data = get_all_data()
-        
         if not data:
             return jsonify({'error': 'No data found'}), 404
         
-        # Create price buckets
         price_buckets = {
-            'Free': 0,
-            '$0.01-$0.99': 0,
-            '$1.00-$4.99': 0,
-            '$5.00-$9.99': 0,
-            '$10.00-$19.99': 0,
-            '$20.00+': 0
+            'Free': 0, '$0.01-$0.99': 0, '$1.00-$4.99': 0,
+            '$5.00-$9.99': 0, '$10.00-$19.99': 0, '$20.00+': 0
         }
         
         total_installs_by_price = {
-            'Free': 0,
-            '$0.01-$0.99': 0,
-            '$1.00-$4.99': 0,
-            '$5.00-$9.99': 0,
-            '$10.00-$19.99': 0,
-            '$20.00+': 0
+            'Free': 0, '$0.01-$0.99': 0, '$1.00-$4.99': 0,
+            '$5.00-$9.99': 0, '$10.00-$19.99': 0, '$20.00+': 0
         }
         
-        for app in data:
-            price = app.get('price_usd', app.get('Price', 0))
-            installs = app.get('installs', 0)
+        for app_doc in data:
+            price = app_doc.get('price_usd', app_doc.get('Price', 0))
+            installs = app_doc.get('installs', 0)
             
             if price <= 0:
                 price_buckets['Free'] += 1
@@ -705,55 +636,55 @@ def insights():
     
     try:
         data = get_all_data()
-        
         if not data:
             return jsonify({'error': 'No data found'}), 404
         
-        insights = []
+        insights_list = []
         
         # Category dominance
         categories = {}
-        for app in data:
-            cat = app.get('category_clean', 'Unknown')
+        for app_doc in data:
+            cat = app_doc.get('category_clean', 'Unknown')
             categories[cat] = categories.get(cat, 0) + 1
         
-        top_category = max(categories.items(), key=lambda x: x[1])
-        insights.append({
-            'type': 'category_dominance',
-            'title': 'Market Dominance',
-            'message': f"The '{top_category[0]}' category dominates with {top_category[1]} apps ({round((top_category[1]/len(data))*100, 1)}% of total)"
-        })
+        if categories:
+            top_category = max(categories.items(), key=lambda x: x[1])
+            insights_list.append({
+                'type': 'category_dominance',
+                'title': 'Market Dominance',
+                'message': f"The '{top_category[0]}' category dominates with {top_category[1]} apps ({round((top_category[1]/len(data))*100, 1)}% of total)"
+            })
         
         # Rating analysis
-        ratings = [app.get('rating', 0) for app in data if app.get('rating', 0) > 0]
+        ratings = [app_doc.get('rating', 0) for app_doc in data if app_doc.get('rating', 0) > 0]
         if ratings:
             avg_rating = sum(ratings) / len(ratings)
-            insights.append({
+            insights_list.append({
                 'type': 'rating_analysis',
                 'title': 'User Satisfaction',
                 'message': f"Average app rating is {avg_rating:.2f}/5.0, indicating generally positive user sentiment"
             })
         
         # Free vs Paid
-        free_count = sum(1 for app in data if app.get('type', 'Free') == 'Free')
+        free_count = sum(1 for app_doc in data if app_doc.get('type', 'Free') == 'Free')
         free_percentage = (free_count / len(data)) * 100
-        insights.append({
+        insights_list.append({
             'type': 'monetization',
             'title': 'Monetization Model',
             'message': f"{free_percentage:.1f}% of apps are free, confirming the freemium model dominance"
         })
         
         # Install analysis
-        total_installs = sum(app.get('installs', 0) for app in data)
+        total_installs = sum(app_doc.get('installs', 0) for app_doc in data)
         avg_installs = total_installs / len(data) if len(data) > 0 else 0
-        insights.append({
+        insights_list.append({
             'type': 'install_analysis',
             'title': 'Market Reach',
             'message': f"Total installs across all apps: {total_installs:,} (Average: {avg_installs:,.0f} per app)"
         })
         
-        set_cached(cache_key, insights)
-        return jsonify(insights)
+        set_cached(cache_key, insights_list)
+        return jsonify(insights_list)
     
     except Exception as e:
         logger.error(f"Error in insights: {e}")
