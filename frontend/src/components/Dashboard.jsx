@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   getDashboardStats, getCategoryAnalysis, getTopApps, 
   getRatingDistribution, getCorrelationAnalysis, getPriceDistribution, getInsights, getReleaseYearDistribution,
-  getFilterOptions, getTopDevelopers, getContentRatingDistribution
+  getFilterOptions, getTopDevelopers, getContentRatingDistribution, getInstallDistribution
 } from '../api/api';
 import { 
   Smartphone, TrendingUp, Users, Download, Star, 
@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [priceDistribution, setPriceDistribution] = useState(null);
   const [releaseYearDistribution, setReleaseYearDistribution] = useState([]);
   const [insights, setInsights] = useState([]);
+  const [installDistribution, setInstallDistribution] = useState([]);
   
   const [filters, setFilters] = useState({ category: 'All', type: 'All', contentRating: 'All' });
   const [filterOptions, setFilterOptions] = useState({ categories: ['All'], types: ['All', 'Free', 'Paid'], contentRatings: ['All'] });
@@ -83,7 +84,8 @@ const Dashboard = () => {
             correlationAnalysisData,
             priceDistData,
             releaseYearData,
-            insightsData
+            insightsData,
+            installDistData
           ] = await Promise.all([
             getTopApps('installs', 50, filters),
             getTopApps('reviews', 15, filters),
@@ -93,7 +95,8 @@ const Dashboard = () => {
             getCorrelationAnalysis(filters),
             getPriceDistribution(filters),
             getReleaseYearDistribution(filters),
-            getInsights(filters)
+            getInsights(filters),
+            getInstallDistribution(filters)
           ]);
           setTopApps(topAppsData);
           setTopAppsByReviews(topAppsByReviewsData);
@@ -104,6 +107,7 @@ const Dashboard = () => {
           setPriceDistribution(priceDistData);
           setReleaseYearDistribution(releaseYearData || []);
           setInsights(insightsData);
+          setInstallDistribution(installDistData);
         } catch (err) {
           console.error('Error loading detailed data:', err);
         }
@@ -175,18 +179,17 @@ const Dashboard = () => {
               Retry
             </button>
           </div>
-          <p className="text-gray-400 text-sm">Make sure the Flask API is running on http://localhost:5000</p>
+          <p className="text-gray-400 text-sm">Make sure the Flask API is running on http://localhost:5001</p>
         </div>
       </div>
     );
   }
 
   const pieData = [
-    { name: 'Free', value: stats.free_apps, color: '#0F9D58' },
-    { name: 'Paid', value: stats.total_apps - stats.free_apps, color: '#4285F4' }
+    { name: 'Free', value: stats?.free_apps || 0, color: '#0F9D58' },
+    { name: 'Paid', value: (stats?.total_apps || 0) - (stats?.free_apps || 0), color: '#4285F4' }
   ];
 
- // ✅ FIX: API Data မလာသေးချိန် နောက်ခံ Data တွက်ချက်မှု မပြဘဲ API Response သို့မဟုတ် Excel Pivot တန်ဖိုး သုံးရန်
   const ratingDistChart = ratingDistribution.length > 0 ? ratingDistribution : [
     { range: '5.0', count: 0 },
     { range: '4.0-4.9', count: 0 },
@@ -196,13 +199,13 @@ const Dashboard = () => {
     { range: '0-0.9', count: 0 }
   ];
 
-  // ✅ FIX: Excel Pivot Table ထဲက တကယ့် Data အရေအတွက် အမှန်များ
-  const installTiers = [
-    { tier: '10M+', count: 1487 },
-    { tier: '1M-10M', count: 1799 },
-    { tier: '100K-1M', count: 2061 },
-    { tier: '10K-100K', count: 3832 },
-    { tier: '<10K', count: 1440 }
+  // ✅ DYNAMIC: Uses API data based on active filters, falls back to empty state if not loaded
+  const installTiers = installDistribution.length > 0 ? installDistribution : [
+    { tier: '10M+', count: 0 },
+    { tier: '1M-10M', count: 0 },
+    { tier: '100K-1M', count: 0 },
+    { tier: '10K-100K', count: 0 },
+    { tier: '<10K', count: 0 }
   ];
 
   return (
@@ -272,12 +275,14 @@ const Dashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatCard icon={<Package className="w-6 h-6" />} label="Total Apps" value={stats.total_apps.toLocaleString()} color="google-green" trend={`+${stats.total_categories} categories`} />
-          <StatCard icon={<Star className="w-6 h-6" />} label="Avg Rating" value={`${stats.avg_rating}/5.0`} color="google-yellow" trend="User satisfaction" />
-          <StatCard icon={<Download className="w-6 h-6" />} label="Total Installs" value={formatNumber(stats.total_installs)} color="google-blue" trend="Market reach" />
-          <StatCard icon={<DollarSign className="w-6 h-6" />} label="Free Apps" value={`${stats.free_percentage}%`} color="google-red" trend={`${stats.free_apps.toLocaleString()} apps`} />
-        </div>
+        {stats && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <StatCard icon={<Package className="w-6 h-6" />} label="Total Apps" value={stats.total_apps.toLocaleString()} color="google-green" trend={`+${stats.total_categories} categories`} />
+            <StatCard icon={<Star className="w-6 h-6" />} label="Avg Rating" value={`${stats.avg_rating}/5.0`} color="google-yellow" trend="User satisfaction" />
+            <StatCard icon={<Download className="w-6 h-6" />} label="Total Installs" value={formatNumber(stats.total_installs)} color="google-blue" trend="Market reach" />
+            <StatCard icon={<DollarSign className="w-6 h-6" />} label="Free Apps" value={`${stats.free_percentage}%`} color="google-red" trend={`${stats.free_apps.toLocaleString()} apps`} />
+          </div>
+        )}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (
@@ -286,33 +291,33 @@ const Dashboard = () => {
             <div className={`grid gap-6 mb-8 ${filters.category === 'All' ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
               
               {/* CONDITIONALLY RENDERED: Only shows when Category is 'All' */}
-              {filters.category === 'All' && (
+              {filters.category === 'All' && stats?.top_categories && (
                <ChartCard title="Top Categories by App Count" icon={<BarChart3 className="w-5 h-5" />}>
-  <ResponsiveContainer width="100%" height={380}>
-    <BarChart 
-      data={stats.top_categories.slice(0, 10)}
-      margin={{ top: 10, right: 10, left: -20, bottom: 80 }} // Bottom margin ကို ရှည်တဲ့ စာလုံးတွေ မပြတ်သွားအောင် 80 ထားပေးထားပါတယ်
-    >
-      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-      <XAxis 
-        dataKey="name" 
-        stroke="#9CA3AF" 
-        fontSize={11} 
-        tick={{ fill: '#9CA3AF' }}
-        interval={0}
-        angle={-90}
-        textAnchor="end"
-        dy={5}
-      />
-      <YAxis stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
-      <Tooltip 
-        contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} 
-        itemStyle={{ color: '#fff' }} 
-      />
-      <Bar dataKey="count" fill="#4285F4" radius={[4, 4, 0, 0]} />
-    </BarChart>
-  </ResponsiveContainer>
-</ChartCard>
+                  <ResponsiveContainer width="100%" height={380}>
+                    <BarChart 
+                      data={stats.top_categories.slice(0, 10)}
+                      margin={{ top: 10, right: 10, left: -20, bottom: 80 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke="#9CA3AF" 
+                        fontSize={11} 
+                        tick={{ fill: '#9CA3AF' }}
+                        interval={0}
+                        angle={-90}
+                        textAnchor="end"
+                        dy={5}
+                      />
+                      <YAxis stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} 
+                        itemStyle={{ color: '#fff' }} 
+                      />
+                      <Bar dataKey="count" fill="#4285F4" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartCard>
               )}
 
               <ChartCard title="Content Rating Breakdown" icon={<Users className="w-5 h-5" />}>
@@ -372,7 +377,7 @@ const Dashboard = () => {
                   <BarChart data={installTiers} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis type="number" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
-                    <YAxis type="category" dataKey="tier" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} width={60} />
+                    <YAxis type="category" dataKey="tier" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} width={70} />
                     <Tooltip contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} />
                     <Bar dataKey="count" fill="#0F9D58" radius={[0, 4, 4, 0]} />
                   </BarChart>

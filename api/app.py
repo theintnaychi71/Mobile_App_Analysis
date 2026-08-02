@@ -60,12 +60,11 @@ if os.environ.get('MONGO_DB'):
     app.config['MONGO_DBNAME'] = os.environ.get('MONGO_DB')
 
 if not app.config['MONGO_URI']:
-    logger.warning("️ MONGO_URI not found in environment variables!")
+    logger.warning("⚠️ MONGO_URI not found in environment variables!")
     app.config['USE_SAMPLE_DATA'] = True
 else:
     app.config['USE_SAMPLE_DATA'] = False
 
-# ✅ ENABLE CORS FOR ALL ROUTES & ORIGINS
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 if not app.config['USE_SAMPLE_DATA']:
@@ -199,7 +198,7 @@ def get_unique_options():
     data = get_all_data()
     categories = sorted(list(set([d.get('category_clean', 'Unknown') for d in data if d.get('category_clean')])))
     content_ratings = sorted(list(set([str(d.get('content_rating', 'Everyone')) for d in data if d.get('content_rating')])))
-    return {'categories': ['All'] + categories, 'types': ['All', 'Free', 'Paid'], 'content_ratings': ['All'] + content_ratings}
+    return {'categories': categories, 'types': ['All', 'Free', 'Paid'], 'content_ratings': content_ratings}
 
 @app.route('/')
 @app.route('/health')
@@ -223,7 +222,6 @@ def dashboard_stats():
     try:
         data = apply_filters(get_all_data(), filters)
         
-        # ✅ FIX: Empty data Handling (404 အစား 200 OK + Empty Structure ပြန်ပေးပါမည်)
         if not data: 
             empty_res = {
                 'total_apps': 0, 'total_categories': 0, 'avg_rating': 0,
@@ -569,6 +567,48 @@ def insights():
         return jsonify(insights_list)
     except Exception as e:
         logger.error(f"Error in insights: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ✅ NEW: Install Distribution by Tier Endpoint
+@app.route('/api/install-distribution')
+def install_distribution():
+    filters = {'category': request.args.get('category'), 'type': request.args.get('type'), 'content_rating': request.args.get('content_rating')}
+    cache_key = f"install_dist_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cached = get_cached(cache_key)
+    if cached: return jsonify(cached)
+    try:
+        data = apply_filters(get_all_data(), filters)
+        if not data:
+            result = [
+                {'tier': '10M+', 'count': 0},
+                {'tier': '1M-10M', 'count': 0},
+                {'tier': '100K-1M', 'count': 0},
+                {'tier': '10K-100K', 'count': 0},
+                {'tier': '<10K', 'count': 0}
+            ]
+            set_cached(cache_key, result)
+            return jsonify(result)
+        
+        tiers = {'10M+': 0, '1M-10M': 0, '100K-1M': 0, '10K-100K': 0, '<10K': 0}
+        for app_doc in data:
+            installs = app_doc.get('installs', 0)
+            if installs >= 10000000:
+                tiers['10M+'] += 1
+            elif installs >= 1000000:
+                tiers['1M-10M'] += 1
+            elif installs >= 100000:
+                tiers['100K-1M'] += 1
+            elif installs >= 10000:
+                tiers['10K-100K'] += 1
+            else:
+                tiers['<10K'] += 1
+                
+        tier_order = ['10M+', '1M-10M', '100K-1M', '10K-100K', '<10K']
+        result = [{'tier': tier, 'count': tiers[tier]} for tier in tier_order]
+        set_cached(cache_key, result)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in install_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
 

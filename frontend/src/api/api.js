@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// ✅ Fixed to Port 5001
 const API_BASE_URL = 'http://localhost:5001/api';
 
 export const api = axios.create({
@@ -10,7 +9,6 @@ export const api = axios.create({
   },
 });
 
-// ✅ Helper to build filter query string (Handles contentRating correctly)
 const buildFilterQuery = (filters = {}) => {
   const params = new URLSearchParams();
   if (filters.category && filters.category !== 'All') {
@@ -19,7 +17,6 @@ const buildFilterQuery = (filters = {}) => {
   if (filters.type && filters.type !== 'All') {
     params.append('type', filters.type);
   }
-  // Support both camelCase and snake_case from Dashboard React state
   const contentRatingVal = filters.contentRating || filters.content_rating;
   if (contentRatingVal && contentRatingVal !== 'All') {
     params.append('content_rating', contentRatingVal);
@@ -159,9 +156,21 @@ export const getReleaseYearDistribution = async (filters = {}) => {
   }
 };
 
+// ✅ NEW: Fetch install distribution dynamically based on filters
+export const getInstallDistribution = async (filters = {}) => {
+  try {
+    const query = buildFilterQuery(filters);
+    const url = query ? `/install-distribution?${query}` : '/install-distribution';
+    const response = await api.get(url);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching install distribution:', error);
+    throw error;
+  }
+};
+
 export const healthCheck = async () => {
   try {
-    // ✅ Updated to Port 5001
     const response = await axios.get('http://localhost:5001/health');
     return response.data;
   } catch (error) {
