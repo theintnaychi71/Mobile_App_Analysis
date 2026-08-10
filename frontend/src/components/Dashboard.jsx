@@ -7,7 +7,7 @@ import {
 import { 
   Smartphone, TrendingUp, Users, Download, Star, 
   PieChart, BarChart3, RefreshCw, Filter, ArrowUpRight,
-  Package, DollarSign, Activity, ScatterChart as ScatterChartIcon, Trophy, Award, Search, ChevronUp, ChevronDown, Calendar, AlertCircle
+  Package, DollarSign, Activity, ScatterChart as ScatterChartIcon, Trophy, Award, Calendar, AlertCircle
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -19,7 +19,6 @@ const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [categoryData, setCategoryData] = useState([]);
   const [topApps, setTopApps] = useState([]);
-  const [topAppsByReviews, setTopAppsByReviews] = useState([]);
   const [ratingDistribution, setRatingDistribution] = useState([]);
   const [correlationData, setCorrelationData] = useState(null);
   const [priceDistribution, setPriceDistribution] = useState(null);
@@ -32,9 +31,6 @@ const Dashboard = () => {
   
   const [topDevelopers, setTopDevelopers] = useState([]);
   const [contentRatingData, setContentRatingData] = useState([]);
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: 'installs', direction: 'descending' });
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -77,7 +73,6 @@ const Dashboard = () => {
         try {
           const [
             topAppsData,
-            topAppsByReviewsData,
             topDevelopersData,
             contentRatingDistData,
             ratingDistData,
@@ -88,7 +83,6 @@ const Dashboard = () => {
             installDistData
           ] = await Promise.all([
             getTopApps('installs', 50, filters),
-            getTopApps('reviews', 15, filters),
             getTopDevelopers('installs', filters),
             getContentRatingDistribution(filters),
             getRatingDistribution(filters),
@@ -99,7 +93,6 @@ const Dashboard = () => {
             getInstallDistribution(filters)
           ]);
           setTopApps(topAppsData);
-          setTopAppsByReviews(topAppsByReviewsData);
           setTopDevelopers(topDevelopersData);
           setContentRatingData(contentRatingDistData);
           setRatingDistribution(ratingDistData);
@@ -128,34 +121,6 @@ const Dashboard = () => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
     return num.toString();
-  };
-
-  const handleSort = (key) => {
-    let direction = 'descending';
-    if (sortConfig.key === key && sortConfig.direction === 'descending') {
-      direction = 'ascending';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const getSortedApps = () => {
-    const filtered = topApps.filter(app => 
-      app.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    return filtered.sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (a[sortConfig.key] > b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
-    });
-  };
-
-  const SortIcon = ({ columnKey }) => {
-    if (sortConfig.key !== columnKey) return null;
-    return sortConfig.direction === 'ascending' ? <ChevronUp className="w-4 h-4 inline-block ml-1" /> : <ChevronDown className="w-4 h-4 inline-block ml-1" />;
   };
 
   if (loading) {
@@ -207,6 +172,13 @@ const Dashboard = () => {
     { tier: '10K-100K', count: 0 },
     { tier: '<10K', count: 0 }
   ];
+
+  // ✅ Scatter data for installs-based plots.
+  // Uses backend scatter_data if it includes installs, otherwise falls back to topApps.
+  const scatterBase = correlationData?.scatter_data || [];
+  const installsScatterData = scatterBase.some(p => typeof p.installs === 'number')
+    ? scatterBase
+    : topApps;
 
   return (
     <div className="pt-20 min-h-screen">
@@ -428,126 +400,94 @@ const Dashboard = () => {
           </>
         )}
 
-        {/* Apps Tab */}
+        {/* ✅ Apps Tab — natural, clean leaderboard list (uses existing topApps data, no new API) */}
         {activeTab === 'apps' && (
           <>
-            <div className="grid lg:grid-cols-2 gap-6 mb-8">
-              <ChartCard title="Top 15 Apps by Installs" icon={<Trophy className="w-5 h-5" />}>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={topApps.slice(0, 15)} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis type="number" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                    <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={11} tick={{ fill: '#9CA3AF' }} width={150} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value) => formatNumber(value)} />
-                    <Bar dataKey="installs" fill="#4285F4" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-
-              <ChartCard title="Top 15 Apps by Reviews" icon={<Users className="w-5 h-5" />}>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={topAppsByReviews} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis type="number" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                    <YAxis type="category" dataKey="name" stroke="#9CA3AF" fontSize={11} tick={{ fill: '#9CA3AF' }} width={150} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value) => formatNumber(value)} />
-                    <Bar dataKey="reviews" fill="#F4B400" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-
             <div className="mb-8">
-              <ChartCard title="Top 10 Developers by Total Installs" icon={<Award className="w-5 h-5" />}>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={topDevelopers} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis type="number" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                    <YAxis type="category" dataKey="developer" stroke="#9CA3AF" fontSize={11} tick={{ fill: '#9CA3AF' }} width={120} />
-                    <Tooltip contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value) => formatNumber(value)} />
-                    <Bar dataKey="total_installs" fill="#9C27B0" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </div>
-
-            {/* Searchable & Sortable App Table */}
-            <ChartCard title="App Details" icon={<Award className="w-5 h-5" />}>
-              <div className="mb-4 flex items-center gap-2">
-                <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder="Search apps by name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-google-blue focus:border-transparent"
-                  />
+              <ChartCard title="Top 15 Apps by Installs" icon={<Trophy className="w-5 h-5" />}>
+                {/* Column headers (desktop only) */}
+                <div className="hidden md:flex items-center gap-4 px-4 pb-3 mb-2 border-b border-gray-700/60 text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <span className="w-8 text-center">#</span>
+                  <span className="w-10"></span>
+                  <span className="flex-1">App</span>
+                  <span className="w-16 text-right">Rating</span>
+                  <span className="w-20 text-right">Installs</span>
+                  <span className="w-16 text-center">Type</span>
                 </div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">App Name</th>
-                      <th className="text-left py-3 px-4 text-gray-400 font-medium">Category</th>
-                      <th 
-                        className="text-right py-3 px-4 text-gray-400 font-medium cursor-pointer hover:text-white transition-colors"
-                        onClick={() => handleSort('rating')}
+
+                <div className="space-y-2">
+                  {topApps.slice(0, 15).map((app, index) => {
+                    const rank = index + 1;
+                    const rankClass =
+                      rank === 1 ? 'bg-google-yellow/20 text-google-yellow' :
+                      rank === 2 ? 'bg-gray-400/20 text-gray-300' :
+                      rank === 3 ? 'bg-orange-600/20 text-orange-400' :
+                      'bg-gray-700/40 text-gray-400';
+
+                    return (
+                      <div
+                        key={`${app.name}-${index}`}
+                        className="flex items-center gap-4 px-4 py-3 rounded-xl bg-gray-800/30 border border-gray-700/40 hover:bg-gray-800/60 hover:border-google-blue/40 transition-colors"
                       >
-                        <span className="inline-flex items-center">
-                          Rating <SortIcon columnKey="rating" />
+                        {/* Rank */}
+                        <span className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center text-sm font-bold ${rankClass}`}>
+                          {rank}
                         </span>
-                      </th>
-                      <th 
-                        className="text-right py-3 px-4 text-gray-400 font-medium cursor-pointer hover:text-white transition-colors"
-                        onClick={() => handleSort('installs')}
-                      >
-                        <span className="inline-flex items-center">
-                          Installs <SortIcon columnKey="installs" />
+
+                        {/* App initial avatar */}
+                        <span
+                          className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-white font-bold"
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        >
+                          {app.name?.charAt(0).toUpperCase()}
                         </span>
-                      </th>
-                      <th 
-                        className="text-right py-3 px-4 text-gray-400 font-medium cursor-pointer hover:text-white transition-colors"
-                        onClick={() => handleSort('reviews')}
-                      >
-                        <span className="inline-flex items-center">
-                          Reviews <SortIcon columnKey="reviews" />
+
+                        {/* Name + category */}
+                        <span className="flex-1 min-w-0">
+                          <p className="text-white font-medium truncate" title={app.name}>{app.name}</p>
+                          <p className="text-xs text-gray-400 truncate">{app.category}</p>
                         </span>
-                      </th>
-                      <th className="text-right py-3 px-4 text-gray-400 font-medium">Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getSortedApps().map((app, index) => (
-                      <tr key={index} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
-                        <td className="py-3 px-4 font-medium text-white">{app.name}</td>
-                        <td className="py-3 px-4 text-gray-400">{app.category}</td>
-                        <td className="text-right py-3 px-4">
-                          <span className="inline-flex items-center justify-end">
-                            <Star className="w-4 h-4 text-google-yellow mr-1" />
-                            {app.rating}
-                          </span>
-                        </td>
-                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(app.installs)}</td>
-                        <td className="text-right py-3 px-4 text-gray-400">{formatNumber(app.reviews)}</td>
-                        <td className="text-right py-3 px-4">
-                          <span className={`px-2 py-1 rounded text-xs ${
+
+                        {/* Rating */}
+                        <span className="hidden md:inline-flex w-16 shrink-0 items-center justify-end text-sm text-gray-300">
+                          <Star className="w-4 h-4 text-google-yellow mr-1" />
+                          {app.rating}
+                        </span>
+
+                        {/* Installs */}
+                        <span className="inline-flex w-20 shrink-0 items-center justify-end text-sm font-semibold text-google-blue">
+                          {formatNumber(app.installs)}
+                        </span>
+
+                        {/* Type badge */}
+                        <span className="hidden md:inline-flex w-16 shrink-0 justify-center">
+                          <span className={`px-2 py-0.5 rounded-full text-xs ${
                             app.type === 'Free' ? 'bg-google-green/20 text-google-green' : 'bg-google-blue/20 text-google-blue'
                           }`}>
                             {app.type}
                           </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {getSortedApps().length === 0 && (
-                      <tr>
-                        <td colSpan="6" className="text-center py-8 text-gray-500">No apps found matching your search.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  {topApps.length === 0 && (
+                    <p className="text-center text-gray-500 py-8">No app data available for the selected filters.</p>
+                  )}
+                </div>
+              </ChartCard>
+            </div>
+
+            <ChartCard title="Top 10 Developers by Total Installs" icon={<Award className="w-5 h-5" />}>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={topDevelopers} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis type="number" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
+                  <YAxis type="category" dataKey="developer" stroke="#9CA3AF" fontSize={11} tick={{ fill: '#9CA3AF' }} width={120} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value) => formatNumber(value)} />
+                  <Bar dataKey="total_installs" fill="#9C27B0" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </ChartCard>
           </>
         )}
@@ -561,18 +501,52 @@ const Dashboard = () => {
               <CorrelationCard title="Reviews vs Installs" value={correlationData.correlations.reviews_installs} description="Correlation between review counts and install counts" color="google-yellow" />
             </div>
 
-            <ChartCard title="Rating vs Reviews Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
-              <ResponsiveContainer width="100%" height={400}>
-                <ScatterChart data={correlationData.scatter_data}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis type="number" dataKey="rating" name="Rating" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} domain={[0, 5]} />
-                  <YAxis type="number" dataKey="reviews" name="Reviews" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                  <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
-                  <Scatter fill="#4285F4" />
-                </ScatterChart>
-              </ResponsiveContainer>
-              <p className="text-center text-gray-400 text-sm mt-4">Sample size: {correlationData.sample_size} apps from {correlationData.total_analyzed} total</p>
-            </ChartCard>
+            <div className="space-y-6">
+              {/* Rating vs Reviews Scatter Plot */}
+              <ChartCard title="Rating vs Reviews Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
+                <ResponsiveContainer width="100%" height={400}>
+                  <ScatterChart data={correlationData.scatter_data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis type="number" dataKey="rating" name="Rating" domain={[0, 5]} stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
+                    <YAxis type="number" dataKey="reviews" name="Reviews" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
+                    <Scatter fill="#4285F4" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+                <CorrelationInsight value={correlationData.correlations.rating_reviews} xName="rating" yName="review count" />
+                <p className="text-center text-gray-400 text-sm mt-4">Sample size: {correlationData.sample_size} apps from {correlationData.total_analyzed} total</p>
+              </ChartCard>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Rating vs Installs Scatter Plot */}
+                <ChartCard title="Rating vs Installs Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <ScatterChart data={installsScatterData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis type="number" dataKey="rating" name="Rating" domain={[0, 5]} stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
+                      <YAxis type="number" dataKey="installs" name="Installs" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
+                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
+                      <Scatter fill="#0F9D58" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                  <CorrelationInsight value={correlationData.correlations.rating_installs} xName="rating" yName="install count" />
+                </ChartCard>
+
+                {/* Reviews vs Installs Scatter Plot */}
+                <ChartCard title="Reviews vs Installs Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <ScatterChart data={installsScatterData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis type="number" dataKey="reviews" name="Reviews" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
+                      <YAxis type="number" dataKey="installs" name="Installs" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
+                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
+                      <Scatter fill="#F4B400" />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                  <CorrelationInsight value={correlationData.correlations.reviews_installs} xName="review count" yName="install count" />
+                </ChartCard>
+              </div>
+            </div>
           </>
         )}
 
@@ -630,7 +604,7 @@ const Dashboard = () => {
                   <InsightCard 
                     title="Peak Release Year" 
                     icon={<Trophy className="w-5 h-5 text-google-green" />} 
-                    insight={`The year ${releaseYearDistribution.reduce((max, item) => item.count > max.count ? item : max).year} had the most app releases with ${releaseYearDistribution.reduce((max, item) => item.count > max.count ? item : max).count.toLocaleString()} apps.`} 
+                    insight={`The year ${releaseYearDistribution.reduce((max, item) => item.count > max.count ? item : max).year} had the most app releases.`} 
                   />
                   <InsightCard 
                     title="Market Growth Trend" 
@@ -735,6 +709,40 @@ const InsightCard = ({ title, icon, insight }) => (
     </div>
   </div>
 );
+
+// Auto-generated analysis text under each scatter plot
+const CorrelationInsight = ({ value, xName, yName }) => {
+  const abs = Math.abs(value);
+  const positive = value >= 0;
+
+  let strength, boxClasses;
+  if (abs >= 0.7)      { strength = 'Strong';     boxClasses = 'border-google-green bg-google-green/10'; }
+  else if (abs >= 0.4) { strength = 'Moderate';   boxClasses = 'border-google-blue bg-google-blue/10'; }
+  else if (abs >= 0.2) { strength = 'Weak';       boxClasses = 'border-google-yellow bg-google-yellow/10'; }
+  else                 { strength = 'Negligible'; boxClasses = 'border-gray-600 bg-gray-800/40'; }
+
+  const label = abs < 0.2
+    ? 'Negligible correlation'
+    : `${strength} ${positive ? 'positive' : 'negative'} correlation`;
+
+  let sentence;
+  if (abs < 0.2) {
+    sentence = `a high ${xName} does not reliably mean a high ${yName} — the two metrics move almost independently.`;
+  } else if (positive) {
+    sentence = `the higher the ${xName}, the higher the ${yName} tends to be.`;
+  } else {
+    sentence = `the higher the ${xName}, the lower the ${yName} tends to be.`;
+  }
+
+  return (
+    <div className={`mt-4 border-l-4 rounded-r-lg p-4 ${boxClasses}`}>
+      <p className="text-sm text-gray-300">
+        <span className="font-semibold text-white">Analysis — {label} (r = {value.toFixed(3)}): </span>
+        In general, {sentence}
+      </p>
+    </div>
+  );
+};
 
 const CorrelationCard = ({ title, value, description, color }) => {
   const colorClasses = {

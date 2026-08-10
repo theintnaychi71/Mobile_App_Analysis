@@ -1,14 +1,19 @@
 import pandas as pd
 import numpy as np
 import re
+import os
 
-print(" Starting Final Data Cleaning Pipeline...")
+print("🚀 Starting Final Data Cleaning Pipeline...")
 
 # ──────────────────────────────────────────────
-# File Paths (Updated for Mac Relative Paths)
+# File Paths (Fixed for your folder structure)
 # ──────────────────────────────────────────────
-input_file = 'data/processed/google_play_dataset.csv'
-output_file = 'data/processed/clean_dataset.csv'
+# From data_processing/scripts/, go up 2 levels to DAMProject, then into data/processed/
+input_file = '../../data/processed/real_world_50k_dataset.csv'
+output_file = '../../data/processed/new_dataset.csv'
+
+# Auto-create output directory if it doesn't exist
+os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
 try:
     df = pd.read_csv(input_file)
@@ -47,7 +52,7 @@ df["Last Updated"] = pd.to_datetime(df["Last Updated"], errors="coerce")
 
 # 5.5. HANDLE MISSING DATES
 print("\n" + "="*50)
-print(" Analyzing Missing Dates...")
+print("📅 Analyzing Missing Dates...")
 print("="*50)
 
 released_missing = df["Released"].isna().sum()
@@ -87,6 +92,8 @@ df["Developer"] = df["Developer"].fillna("Unknown Developer").str.strip()
 df["Free"] = df["Free"].fillna(False)
 if "In-App Purchases" in df.columns:
     df["In-App Purchases"] = df["In-App Purchases"].fillna(False)
+if "Contains Ads" in df.columns:
+    df["Contains Ads"] = df["Contains Ads"].fillna(False)
 
 # 7. Feature Engineering
 df["App_Age_Days"] = (df["Last Updated"] - df["Released"]).dt.days
@@ -103,7 +110,7 @@ df["Price_Tier"] = df["Price"].apply(get_price_tier)
 
 def get_popularity_tier(installs):
     if installs < 1000: return "Niche (<1K)"
-    elif installs < 100000: return "Growing (1K-100K)"
+    elif installs < 100000: return "Growing (10K-100K)"
     elif installs < 1000000: return "Popular (100K-1M)"
     elif installs < 10000000: return "Very Popular (1M-10M)"
     else: return "Mega Hit (10M+)"
@@ -120,7 +127,7 @@ print("\n" + "="*50)
 print("✅ DATA CLEANING COMPLETE!")
 print(f" Final Dataset: {df.shape[0]} rows, {df.shape[1]} columns")
 print(f"💾 Saved to: {output_file}")
-print("\n Final Columns:")
+print("\n📋 Final Columns:")
 for col in df.columns:
     print(f"  - {col}")
 print("="*50)
