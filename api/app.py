@@ -56,6 +56,82 @@ def set_cached(key, value):
     _cache[key] = value
     _cache_timestamps[key] = time.time()
 
+
+def build_mongo_match(filters):
+    conditions = []
+    category = filters.get('category')
+    content_rating = filters.get('content_rating')
+    app_type = filters.get('type')
+
+    if category and category.upper() != 'ALL':
+        conditions.append({
+            '$or': [
+                {'category_clean': category},
+                {'Category': category},
+                {'category': category}
+            ]
+        })
+
+    if content_rating and content_rating.upper() != 'ALL':
+        conditions.append({
+            '$or': [
+                {'content_rating': content_rating},
+                {'Content Rating': content_rating},
+                {'content_rating': content_rating.capitalize()}
+            ]
+        })
+
+    if app_type and app_type.upper() != 'ALL':
+        if app_type.capitalize() == 'Free':
+            conditions.append({'$or': [{'type': 'Free'}, {'Free': True}, {'Price': {'$lte': 0}}]})
+        else:
+            conditions.append({'$or': [{'type': 'Paid'}, {'Free': False}, {'Price': {'$gt': 0}}]})
+
+    if not conditions:
+        return {}
+    if len(conditions) == 1:
+        return conditions[0]
+    return {'$and': conditions}
+
+
+def get_filtered_docs(filters, projection=None):
+    if app.config['USE_SAMPLE_DATA']:
+        return apply_filters(SAMPLE_DATA, filters)
+
+    try:
+        db_name = app.config.get('MONGO_DB')
+        collection_name = app.config.get('MONGO_COLLECTION', 'apps')
+        db = mongo.cx[db_name] if db_name else mongo.db
+        collection = db[collection_name]
+
+        if projection is None:
+            projection = {
+                '_id': 0,
+                'App Name': 1,
+                'Category': 1,
+                'category_clean': 1,
+                'Rating': 1,
+                'Reviews': 1,
+                'Installs': 1,
+                'Free': 1,
+                'Price': 1,
+                'price_usd': 1,
+                'Developer': 1,
+                'Price_Tier': 1,
+                'Released': 1,
+                'Last Updated': 1,
+                'content_rating': 1,
+                'type': 1
+            }
+
+        query = build_mongo_match(filters)
+        raw_data = list(collection.find(query, projection))
+        return [_normalize_doc(doc) for doc in raw_data]
+    except Exception as e:
+        logger.error(f"Error fetching filtered docs: {e}")
+        return []
+
+
 if os.environ.get('MONGO_DB'):
     app.config['MONGO_DBNAME'] = os.environ.get('MONGO_DB')
 
@@ -165,8 +241,14 @@ def get_all_data():
             'Released': 1,
             'Last Updated': 1
         }
+        cached = get_cached('all_data')
+        if cached:
+            return cached
+
         raw_data = list(collection.find({}, projection))
-        return [_normalize_doc(doc) for doc in raw_data] if raw_data else SAMPLE_DATA
+        result = [_normalize_doc(doc) for doc in raw_data] if raw_data else SAMPLE_DATA
+        set_cached('all_data', result)
+        return result
     except Exception as e:
         logger.error(f"Error fetching data: {e}")
         return SAMPLE_DATA
@@ -200,6 +282,244 @@ def get_unique_options():
     content_ratings = sorted(list(set([str(d.get('content_rating', 'Everyone')) for d in data if d.get('content_rating')])))
     return {'categories': categories, 'types': ['All', 'Free', 'Paid'], 'content_ratings': content_ratings}
 
+
+def build_dashboard_summary(filters):
+    docs = get_filtered_docs(filters)
+    if not docs:
+        return {
+            'stats': {'total_apps': 0, 'total_categories': 0, 'avg_rating': 0, 'total_installs': 0, 'total_reviews': 0, 'free_apps': 0, 'free_percentage': 0, 'top_categories': []},
+            'category_analysis': [],
+            'top_apps': [],
+            'top_developers': [],
+            'content_rating_distribution': [],
+            'rating_distribution': [],
+            'correlation_analysis': {'correlations': {'rating_reviews': 0, 'rating_installs': 0, 'reviews_installs': 0}, 'scatter_data': [], 'sample_size': 0, 'total_analyzed': 0},
+            'price_distribution': {'app_count': [], 'install_distribution': []},
+            'release_year_distribution': [],
+            'insights': [],
+            'install_distribution': []
+        }
+
+    categories = {}
+    free_count = total_installs = total_reviews = 0
+    for app_doc in docs:
+        cat_name = app_doc.get('category_clean', 'Unknown')
+        categories[cat_name] = categories.get(cat_name, 0) + 1
+        if app_doc.get('type', 'Free') == 'Free':
+            free_count += 1
+        total_installs += app_doc.get('installs', 0)
+        total_reviews += app_doc.get('reviews', 0)
+    ratings = [app_doc.get('rating', 0) for app_doc in docs if app_doc.get('rating', 0) > 0]
+    avg_rating = sum(ratings) / len(ratings) if ratings else 0
+    stats = {
+        'total_apps': len(docs),
+        'total_categories': len(categories),
+        'avg_rating': round(avg_rating, 2),
+        'total_installs': total_installs,
+        'total_reviews': total_reviews,
+        'free_apps': free_count,
+        'free_percentage': round((free_count / len(docs)) * 100, 2) if docs else 0,
+        'top_categories': sorted([{'name': k, 'count': v} for k, v in categories.items()], key=lambda x: x['count'], reverse=True)[:10]
+    }
+
+    category_stats = {}
+    for app_doc in docs:
+        cat = app_doc.get('category_clean', 'Unknown')
+        if cat not in category_stats:
+            category_stats[cat] = {'count': 0, 'total_rating': 0, 'total_installs': 0, 'total_reviews': 0, 'free_count': 0, 'paid_count': 0}
+        stats_cat = category_stats[cat]
+        stats_cat['count'] += 1
+        stats_cat['total_rating'] += app_doc.get('rating', 0)
+        stats_cat['total_installs'] += app_doc.get('installs', 0)
+        stats_cat['total_reviews'] += app_doc.get('reviews', 0)
+        if app_doc.get('type', 'Free') == 'Free':
+            stats_cat['free_count'] += 1
+        else:
+            stats_cat['paid_count'] += 1
+    category_analysis = []
+    for cat, stats_cat in category_stats.items():
+        category_analysis.append({
+            'category': cat,
+            'count': stats_cat['count'],
+            'avg_rating': round(stats_cat['total_rating'] / stats_cat['count'], 2) if stats_cat['count'] else 0,
+            'total_installs': stats_cat['total_installs'],
+            'avg_installs': round(stats_cat['total_installs'] / stats_cat['count']) if stats_cat['count'] else 0,
+            'total_reviews': stats_cat['total_reviews'],
+            'avg_reviews': round(stats_cat['total_reviews'] / stats_cat['count']) if stats_cat['count'] else 0,
+            'free_count': stats_cat['free_count'],
+            'paid_count': stats_cat['paid_count'],
+            'free_percentage': round((stats_cat['free_count'] / stats_cat['count']) * 100, 2) if stats_cat['count'] else 0
+        })
+    category_analysis.sort(key=lambda x: x['count'], reverse=True)
+
+    top_apps = sorted(docs, key=lambda x: x.get('installs', 0), reverse=True)[:50]
+    top_apps = [
+        {
+            'name': app_doc.get('app_name', app_doc.get('App Name', 'Unknown')),
+            'category': app_doc.get('category_clean', app_doc.get('Category', 'Unknown')),
+            'rating': app_doc.get('rating', 0),
+            'installs': app_doc.get('installs', 0),
+            'reviews': app_doc.get('reviews', 0),
+            'type': app_doc.get('type', 'Free'),
+            'price': app_doc.get('price_usd', app_doc.get('Price', 0)),
+            'content_rating': app_doc.get('content_rating', 'Everyone'),
+            'developer': app_doc.get('developer') or app_doc.get('Developer') or 'Unknown'
+        }
+        for app_doc in top_apps
+    ]
+
+    dev_stats = {}
+    for app_doc in docs:
+        dev = app_doc.get('developer') or app_doc.get('Developer') or 'Unknown'
+        if dev not in dev_stats:
+            dev_stats[dev] = {'developer': dev, 'total_installs': 0, 'app_count': 0, 'total_reviews': 0}
+        dev_stats[dev]['total_installs'] += app_doc.get('installs', 0)
+        dev_stats[dev]['app_count'] += 1
+        dev_stats[dev]['total_reviews'] += app_doc.get('reviews', 0)
+    top_developers = list(dev_stats.values())
+    top_developers.sort(key=lambda x: x['total_installs'], reverse=True)
+    for d in top_developers[:10]:
+        d['avg_installs'] = round(d['total_installs'] / d['app_count']) if d['app_count'] > 0 else 0
+    top_developers = top_developers[:10]
+
+    rating_counts = {}
+    rating_installs = {}
+    for app_doc in docs:
+        cr = str(app_doc.get('content_rating', 'Everyone')) or 'Everyone'
+        rating_counts[cr] = rating_counts.get(cr, 0) + 1
+        rating_installs[cr] = rating_installs.get(cr, 0) + app_doc.get('installs', 0)
+    content_rating_distribution = [{'rating': k, 'count': rating_counts[k], 'total_installs': rating_installs.get(k, 0)} for k in rating_counts.keys()]
+    content_rating_distribution.sort(key=lambda x: x['count'], reverse=True)
+
+    rating_buckets = {'5.0': 0, '4.5-4.9': 0, '4.0-4.4': 0, '3.5-3.9': 0, '3.0-3.4': 0, '2.5-2.9': 0, '2.0-2.4': 0, '1.5-1.9': 0, '1.0-1.4': 0, '0-0.9': 0}
+    for app_doc in docs:
+        rating = app_doc.get('rating', 0)
+        if rating >= 5.0:
+            rating_buckets['5.0'] += 1
+        elif rating >= 4.5:
+            rating_buckets['4.5-4.9'] += 1
+        elif rating >= 4.0:
+            rating_buckets['4.0-4.4'] += 1
+        elif rating >= 3.5:
+            rating_buckets['3.5-3.9'] += 1
+        elif rating >= 3.0:
+            rating_buckets['3.0-3.4'] += 1
+        elif rating >= 2.5:
+            rating_buckets['2.5-2.9'] += 1
+        elif rating >= 2.0:
+            rating_buckets['2.0-2.4'] += 1
+        elif rating >= 1.5:
+            rating_buckets['1.5-1.9'] += 1
+        elif rating >= 1.0:
+            rating_buckets['1.0-1.4'] += 1
+        else:
+            rating_buckets['0-0.9'] += 1
+    rating_distribution = [{'range': k, 'count': v} for k, v in rating_buckets.items()]
+
+    ratings = [app_doc.get('rating', 0) for app_doc in docs if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0]
+    reviews = [app_doc.get('reviews', 0) for app_doc in docs if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0]
+    installs = [app_doc.get('installs', 0) for app_doc in docs if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0]
+
+    def calc_corr(x, y):
+        n = len(x)
+        if n < 2:
+            return 0
+        mean_x, mean_y = sum(x) / n, sum(y) / n
+        num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
+        den = math.sqrt(sum((xi - mean_x)**2 for xi in x) * sum((yi - mean_y)**2 for yi in y))
+        return num / den if den != 0 else 0
+
+    correlation_analysis = {
+        'correlations': {
+            'rating_reviews': round(calc_corr(ratings, reviews), 3),
+            'rating_installs': round(calc_corr(ratings, installs), 3),
+            'reviews_installs': round(calc_corr(reviews, installs), 3)
+        },
+        'scatter_data': [
+            {'rating': ratings[i], 'reviews': reviews[i], 'installs': installs[i]}
+            for i in random.sample(range(len(ratings)), min(500, len(ratings)))
+        ],
+        'sample_size': min(500, len(ratings)),
+        'total_analyzed': len(ratings)
+    }
+
+    price_buckets = {'Free': 0, '$0.01-$0.99': 0, '$1.00-$4.99': 0, '$5.00-$9.99': 0, '$10.00-$19.99': 0, '$20.00+': 0}
+    total_installs_by_price = {k: 0 for k in price_buckets}
+    for app_doc in docs:
+        price = app_doc.get('price_usd', app_doc.get('Price', 0))
+        installs_value = app_doc.get('installs', 0)
+        if price <= 0:
+            price_buckets['Free'] += 1
+            total_installs_by_price['Free'] += installs_value
+        elif price < 1.0:
+            price_buckets['$0.01-$0.99'] += 1
+            total_installs_by_price['$0.01-$0.99'] += installs_value
+        elif price < 5.0:
+            price_buckets['$1.00-$4.99'] += 1
+            total_installs_by_price['$1.00-$4.99'] += installs_value
+        elif price < 10.0:
+            price_buckets['$5.00-$9.99'] += 1
+            total_installs_by_price['$5.00-$9.99'] += installs_value
+        elif price < 20.0:
+            price_buckets['$10.00-$19.99'] += 1
+            total_installs_by_price['$10.00-$19.99'] += installs_value
+        else:
+            price_buckets['$20.00+'] += 1
+            total_installs_by_price['$20.00+'] += installs_value
+    price_distribution = {
+        'app_count': [{'price': k, 'count': v} for k, v in price_buckets.items()],
+        'install_distribution': [{'price': k, 'installs': v} for k, v in total_installs_by_price.items()]
+    }
+
+    year_counts = {}
+    for app_doc in docs:
+        released = app_doc.get('released') or app_doc.get('Released', '')
+        last_updated = app_doc.get('last_updated') or app_doc.get('Last Updated', '')
+        year = extract_year_from_date(released) or extract_year_from_date(last_updated)
+        if year:
+            year_counts[year] = year_counts.get(year, 0) + 1
+    release_year_distribution = [{'year': k, 'count': v} for k, v in sorted(year_counts.items(), key=lambda x: x[0])]
+
+    insights = []
+    if categories:
+        top_category = max(categories.items(), key=lambda x: x[1])
+        insights.append({'type': 'category_dominance', 'title': 'Market Dominance', 'message': f"The '{top_category[0]}' category dominates with {top_category[1]} apps ({round((top_category[1]/len(docs))*100, 1)}% of total)"})
+    if ratings:
+        insights.append({'type': 'rating_analysis', 'title': 'User Satisfaction', 'message': f"Average app rating is {sum(ratings)/len(ratings):.2f}/5.0, indicating generally positive user sentiment"})
+    insights.append({'type': 'monetization', 'title': 'Monetization Model', 'message': f"{(free_count/len(docs))*100:.1f}% of apps are free, confirming the freemium model dominance"})
+    total_installs_all = sum(app_doc.get('installs', 0) for app_doc in docs)
+    insights.append({'type': 'install_analysis', 'title': 'Market Reach', 'message': f"Total installs across all apps: {total_installs_all:,} (Average: {total_installs_all/len(docs):,.0f} per app)"})
+
+    install_distribution = []
+    tiers = {'10M+': 0, '1M-10M': 0, '100K-1M': 0, '10K-100K': 0, '<10K': 0}
+    for app_doc in docs:
+        installs_value = app_doc.get('installs', 0)
+        if installs_value >= 10000000:
+            tiers['10M+'] += 1
+        elif installs_value >= 1000000:
+            tiers['1M-10M'] += 1
+        elif installs_value >= 100000:
+            tiers['100K-1M'] += 1
+        elif installs_value >= 10000:
+            tiers['10K-100K'] += 1
+        else:
+            tiers['<10K'] += 1
+    install_distribution = [{'tier': t, 'count': tiers[t]} for t in ['10M+', '1M-10M', '100K-1M', '10K-100K', '<10K']]
+
+    return {
+        'stats': stats,
+        'category_analysis': category_analysis,
+        'top_apps': top_apps,
+        'top_developers': top_developers,
+        'content_rating_distribution': content_rating_distribution,
+        'rating_distribution': rating_distribution,
+        'correlation_analysis': correlation_analysis,
+        'price_distribution': price_distribution,
+        'release_year_distribution': release_year_distribution,
+        'insights': insights,
+        'install_distribution': install_distribution
+    }
+
 @app.route('/')
 @app.route('/health')
 def health_check():
@@ -212,6 +532,21 @@ def filter_options():
     options = get_unique_options()
     set_cached('filter_options', options)
     return jsonify(options)
+
+@app.route('/api/dashboard/summary')
+def dashboard_summary():
+    filters = {'category': request.args.get('category'), 'type': request.args.get('type'), 'content_rating': request.args.get('content_rating')}
+    cache_key = f"dashboard_summary_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
+    cached = get_cached(cache_key)
+    if cached:
+        return jsonify(cached)
+    try:
+        summary = build_dashboard_summary(filters)
+        set_cached(cache_key, summary)
+        return jsonify(summary)
+    except Exception as e:
+        logger.error(f"Error in dashboard_summary: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/dashboard/stats')
 def dashboard_stats():
