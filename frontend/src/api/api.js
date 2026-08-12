@@ -178,3 +178,14 @@ export const healthCheck = async () => {
     throw error;
   }
 };
+
+// App Success Prediction API
+export const predictAppSuccess = async (appData) => {
+  try {
+    const response = await api.post('/predict', appData);
+    return response.data;
+  } catch (error) {
+    console.error('Error predicting app success:', error);
+    throw error;
+  }
+};

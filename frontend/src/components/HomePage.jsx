@@ -63,6 +63,13 @@ const HomePage = () => {
                 <TrendingUp className="w-5 h-5" />
                 <span>Explore Dashboard</span>
               </Link>
+              <Link
+                to="/predict"
+                className="w-full sm:w-auto bg-gradient-to-r from-google-green to-google-blue hover:from-green-600 hover:to-blue-600 text-white font-medium py-3 px-8 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl"
+              >
+                <Smartphone className="w-5 h-5" />
+                <span>Predict Success</span>
+              </Link>
               <a
                 href="https://github.com"
                 target="_blank"
@@ -147,9 +154,9 @@ const HomePage = () => {
             />
             <FeatureCard
               icon={<TrendingUp className="w-8 h-8" />}
-              title="Trend Analysis"
-              description="Track app market growth over time with release date analytics"
-              color="google-red"
+              title="Success Prediction"
+              description="AI-powered prediction for your app's potential success"
+              color="google-green"
             />
             <FeatureCard
               icon={<Users className="w-8 h-8" />}

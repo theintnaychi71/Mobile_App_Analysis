@@ -1,20 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { Smartphone, BarChart3, Home, TrendingUp, PieChart } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { Smartphone, BarChart3, Home, TrendingUp } from 'lucide-react';
 import HomePage from './components/HomePage';
 import Dashboard from './components/Dashboard';
+import Prediction from './components/Prediction';
 
 function App() {
   return (
     <Router>
+      <AppLayout />
+    </Router>
+  );
+}
+
+function AppLayout() {
+  const location = useLocation();
+  const isPredictionPage = location.pathname === '/predict';
+
+  return (
       <div className="min-h-screen bg-play-dark">
-        <Navbar />
+        {!isPredictionPage && <Navbar />}
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/predict" element={<Prediction />} />
         </Routes>
       </div>
-    </Router>
   );
 }
 
@@ -50,6 +61,9 @@ function Navbar() {
             </NavLink>
             <NavLink to="/dashboard" icon={<BarChart3 className="w-4 h-4" />}>
               Dashboard
+            </NavLink>
+            <NavLink to="/predict" icon={<TrendingUp className="w-4 h-4" />}>
+              Predict
             </NavLink>
           </div>
 
