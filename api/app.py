@@ -27,7 +27,6 @@ import logging
 from datetime import datetime
 import time
 import math
-import random
 import re
 
 load_dotenv()
@@ -293,7 +292,6 @@ def build_dashboard_summary(filters):
             'top_developers': [],
             'content_rating_distribution': [],
             'rating_distribution': [],
-            'correlation_analysis': {'correlations': {'rating_reviews': 0, 'rating_installs': 0, 'reviews_installs': 0}, 'scatter_data': [], 'sample_size': 0, 'total_analyzed': 0},
             'price_distribution': {'app_count': [], 'install_distribution': []},
             'release_year_distribution': [],
             'insights': [],
@@ -416,33 +414,6 @@ def build_dashboard_summary(filters):
             rating_buckets['0-0.9'] += 1
     rating_distribution = [{'range': k, 'count': v} for k, v in rating_buckets.items()]
 
-    ratings = [app_doc.get('rating', 0) for app_doc in docs if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0]
-    reviews = [app_doc.get('reviews', 0) for app_doc in docs if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0]
-    installs = [app_doc.get('installs', 0) for app_doc in docs if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0]
-
-    def calc_corr(x, y):
-        n = len(x)
-        if n < 2:
-            return 0
-        mean_x, mean_y = sum(x) / n, sum(y) / n
-        num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
-        den = math.sqrt(sum((xi - mean_x)**2 for xi in x) * sum((yi - mean_y)**2 for yi in y))
-        return num / den if den != 0 else 0
-
-    correlation_analysis = {
-        'correlations': {
-            'rating_reviews': round(calc_corr(ratings, reviews), 3),
-            'rating_installs': round(calc_corr(ratings, installs), 3),
-            'reviews_installs': round(calc_corr(reviews, installs), 3)
-        },
-        'scatter_data': [
-            {'rating': ratings[i], 'reviews': reviews[i], 'installs': installs[i]}
-            for i in random.sample(range(len(ratings)), min(500, len(ratings)))
-        ],
-        'sample_size': min(500, len(ratings)),
-        'total_analyzed': len(ratings)
-    }
-
     price_buckets = {'Free': 0, '$0.01-$0.99': 0, '$1.00-$4.99': 0, '$5.00-$9.99': 0, '$10.00-$19.99': 0, '$20.00+': 0}
     total_installs_by_price = {k: 0 for k in price_buckets}
     for app_doc in docs:
@@ -513,7 +484,6 @@ def build_dashboard_summary(filters):
         'top_developers': top_developers,
         'content_rating_distribution': content_rating_distribution,
         'rating_distribution': rating_distribution,
-        'correlation_analysis': correlation_analysis,
         'price_distribution': price_distribution,
         'release_year_distribution': release_year_distribution,
         'insights': insights,
@@ -752,56 +722,6 @@ def rating_distribution():
         logger.error(f"Error in rating_distribution: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/correlation-analysis')
-def correlation_analysis():
-    filters = {'category': request.args.get('category'), 'type': request.args.get('type'), 'content_rating': request.args.get('content_rating')}
-    cache_key = f"corr_{filters.get('category') or 'all'}_{filters.get('type') or 'all'}_{filters.get('content_rating') or 'all'}"
-    cached = get_cached(cache_key)
-    if cached: return jsonify(cached)
-    try:
-        data = apply_filters(get_all_data(), filters)
-        if not data:
-            return jsonify({
-                'correlations': {'rating_reviews': 0, 'rating_installs': 0, 'reviews_installs': 0},
-                'scatter_data': [], 'sample_size': 0, 'total_analyzed': 0
-            })
-        
-        ratings, reviews, installs, prices = [], [], [], []
-        for app_doc in data:
-            if app_doc.get('rating', 0) > 0 and app_doc.get('reviews', 0) > 0:
-                ratings.append(app_doc.get('rating', 0))
-                reviews.append(app_doc.get('reviews', 0))
-                installs.append(app_doc.get('installs', 0))
-                prices.append(app_doc.get('price_usd', app_doc.get('Price', 0)))
-        
-        def calc_corr(x, y):
-            n = len(x)
-            if n < 2: return 0
-            mean_x, mean_y = sum(x)/n, sum(y)/n
-            num = sum((xi - mean_x) * (yi - mean_y) for xi, yi in zip(x, y))
-            den = math.sqrt(sum((xi - mean_x)**2 for xi in x) * sum((yi - mean_y)**2 for yi in y))
-            return num / den if den != 0 else 0
-            
-        scatter_data = []
-        sample_size = min(500, len(ratings))
-        if sample_size > 0:
-            for i in random.sample(range(len(ratings)), sample_size):
-                scatter_data.append({'rating': ratings[i], 'reviews': reviews[i], 'installs': installs[i]})
-                
-        result = {
-            'correlations': {
-                'rating_reviews': round(calc_corr(ratings, reviews), 3),
-                'rating_installs': round(calc_corr(ratings, installs), 3),
-                'reviews_installs': round(calc_corr(reviews, installs), 3)
-            },
-            'scatter_data': scatter_data, 'sample_size': sample_size, 'total_analyzed': len(ratings)
-        }
-        set_cached(cache_key, result)
-        return jsonify(result)
-    except Exception as e:
-        logger.error(f"Error in correlation_analysis: {e}")
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/api/price-distribution')
 def price_distribution():
     filters = {'category': request.args.get('category'), 'type': request.args.get('type'), 'content_rating': request.args.get('content_rating')}
@@ -947,383 +867,503 @@ def install_distribution():
         return jsonify({'error': str(e)}), 500
 
 
-# ============================================
-# APP SUCCESS PREDICTION ENDPOINT
-# ============================================
-# ============================================
+# # ============================================
 # ENHANCED APP SUCCESS PREDICTION ENDPOINT
 # ============================================
 @app.route('/api/predict', methods=['POST'])
 def predict_app_success():
     """
-    Advanced app success prediction with market analysis and comparative benchmarks.
+    Strategic Market Readiness Evaluator.
+    Evaluates the viability of an app's business plan against real market benchmarks.
     """
     try:
         data = request.get_json()
-        
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
-        # Extract and validate input data
-        required_fields = ['category', 'rating', 'reviews', 'installs', 'isFree']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Input values
+        # 1. Extract strategic inputs
         category = data.get('category', 'GAME').upper()
-        rating = float(data.get('rating', 3.5))
-        reviews = int(data.get('reviews', 0))
-        installs = int(data.get('installs', 0))
-        is_free = bool(data.get('isFree', True))
-        price = float(data.get('price', 0))
-        app_name = data.get('appName', 'Unknown')
-        developer = data.get('developer', 'Unknown')
-        content_rating = data.get('contentRating', 'Everyone')
+        monetization = data.get('monetizationModel', 'Freemium')
+        audience = data.get('targetAudience', 'Broad (General public)')
+        marketing = data.get('marketingBudget', 'Low (<$1k/mo)')
+        uvp = data.get('uniqueValue', 'Medium (Better version of existing)')
+        experience = data.get('teamExperience', 'Some experience')
+        retention = data.get('retentionFocus', 'Medium (Occasional use)')
+        app_name = data.get('appName', 'Untitled App')
         
-        # Get all data for market analysis
+        # 2. Fetch real market data for benchmarking
         all_data = get_all_data()
+        category_apps = [app for app in all_data if app.get('category_clean', '').upper() == category]
         
-        # Get category-specific data
-        category_apps = [app for app in all_data if app.get('category_clean', '').upper() == category.upper()]
-        category_count = len(category_apps)
+        # Also check parent category (e.g., ARCADE -> GAME)
+        parent_category = category.split('_')[0] if '_' in category else category
+        if not category_apps and parent_category != category:
+            category_apps = [app for app in all_data if app.get('category_clean', '').upper() == parent_category]
         
-        # Calculate category baselines
         if category_apps:
             avg_category_rating = sum(app.get('rating', 0) for app in category_apps) / len(category_apps)
-            avg_category_reviews = sum(app.get('reviews', 0) for app in category_apps) / len(category_apps)
             avg_category_installs = sum(app.get('installs', 0) for app in category_apps) / len(category_apps)
-            
-            # Percentile calculations
-            sorted_installs = sorted([app.get('installs', 0) for app in category_apps])
-            percentile_25 = sorted_installs[int(len(sorted_installs) * 0.25)] if sorted_installs else 0
-            percentile_50 = sorted_installs[int(len(sorted_installs) * 0.50)] if sorted_installs else 0
-            percentile_75 = sorted_installs[int(len(sorted_installs) * 0.75)] if sorted_installs else 0
-            
-            # Category performance metrics
-            category_rating_dist = {
-                'excellent': len([a for a in category_apps if a.get('rating', 0) >= 4.5]),
-                'good': len([a for a in category_apps if 4.0 <= a.get('rating', 0) < 4.5]),
-                'average': len([a for a in category_apps if 3.0 <= a.get('rating', 0) < 4.0]),
-                'poor': len([a for a in category_apps if a.get('rating', 0) < 3.0])
-            }
         else:
-            avg_category_rating = 4.0
-            avg_category_reviews = 5000
+            avg_category_rating = 4.2
             avg_category_installs = 100000
-            percentile_25 = 10000
-            percentile_50 = 50000
-            percentile_75 = 200000
-            category_rating_dist = {'excellent': 30, 'good': 40, 'average': 25, 'poor': 5}
-        
-        # Calculate overall market metrics
+            
         all_ratings = [app.get('rating', 0) for app in all_data if app.get('rating', 0) > 0]
-        avg_market_rating = sum(all_ratings) / len(all_ratings) if all_ratings else 4.0
-        
+        avg_market_rating = sum(all_ratings) / len(all_ratings) if all_ratings else 4.2
         all_installs = [app.get('installs', 0) for app in all_data]
         avg_market_installs = sum(all_installs) / len(all_installs) if all_installs else 500000
         
-        # ===== ADVANCED SCORING ALGORITHM =====
+        # ==========================================
+        # SCORING ALGORITHM
+        # ==========================================
         
-        # 1. QUALITY SCORE (25 points) - Based on rating and reviews
-        quality_score = 0
+        # 1. PRODUCT VIABILITY (Max 30)
+        product_score = 0
+        if 'High' in uvp or 'nothing else' in uvp.lower(): product_score += 15
+        elif 'Medium' in uvp or 'better' in uvp.lower(): product_score += 10
+        else: product_score += 5
         
-        # Rating component (15 points)
-        if rating >= 4.5:
-            quality_score += 15
-        elif rating >= 4.0:
-            quality_score += 12
-        elif rating >= 3.5:
-            quality_score += 9
-        elif rating >= 3.0:
-            quality_score += 6
-        else:
-            quality_score += 3
+        if 'Experienced' in experience: product_score += 15
+        elif 'Some' in experience: product_score += 10
+        else: product_score += 5
         
-        # Review quality ratio (10 points) - High review count with good rating = engaged users
-        if installs > 0:
-            review_ratio = reviews / installs
-            if review_ratio >= 0.01:  # 1% review rate - excellent engagement
-                quality_score += 10
-            elif review_ratio >= 0.005:  # 0.5% review rate - good
-                quality_score += 8
-            elif review_ratio >= 0.002:  # 0.2% review rate - average
-                quality_score += 5
-            elif review_ratio >= 0.001:  # 0.1% review rate - below average
-                quality_score += 3
-            else:
-                quality_score += 1
-        else:
-            quality_score += 5  # Default if no installs
-        
-        # 2. MARKET PERFORMANCE SCORE (30 points) - Based on installs relative to category
+        # 2. MARKET FIT (Max 25)
         market_score = 0
+        high_demand_categories = ['GAME', 'SOCIAL', 'ENTERTAINMENT', 'PRODUCTIVITY', 
+                                   'HEALTH', 'COMMUNICATION', 'ARCADE', 'CASUAL', 
+                                   'ACTION', 'ADVENTURE', 'PUZZLE', 'RACING', 'SPORTS']
         
-        if installs >= percentile_75:
-            market_score = 30  # Top 25%
-        elif installs >= percentile_50:
-            market_score = 24  # Top 50%
-        elif installs >= percentile_25:
-            market_score = 18  # Top 75%
+        is_high_demand = any(hd in category for hd in high_demand_categories)
+        is_broad = 'Broad' in audience
+        is_niche = 'Niche' in audience
+        is_b2b = 'B2B' in audience
+        
+        if is_high_demand and is_broad:
+            market_score = 25
+        elif is_high_demand and is_niche:
+            market_score = 18
+        elif is_niche and not is_high_demand:
+            market_score = 15
+        elif is_b2b:
+            market_score = 12
         else:
-            market_score = 10  # Bottom 25%
+            market_score = 10
+            
+        # 3. GROWTH & MARKETING (Max 25)
+        growth_score = 0
+        if 'High' in marketing: growth_score += 15
+        elif 'Medium' in marketing: growth_score += 10
+        elif 'Low' in marketing: growth_score += 5
+        else: growth_score += 2
         
-        # Bonus for exceeding category average
-        if avg_category_installs > 0 and installs > avg_category_installs:
-            market_score += min(5, (installs / avg_category_installs - 1) * 10)
-        
-        market_score = min(30, market_score)
-        
-        # 3. USER ENGAGEMENT SCORE (20 points) - Based on reviews and retention indicators
-        engagement_score = 0
-        
-        # Review velocity (10 points)
-        if reviews >= 10000:
-            engagement_score += 10
-        elif reviews >= 5000:
-            engagement_score += 8
-        elif reviews >= 1000:
-            engagement_score += 6
-        elif reviews >= 100:
-            engagement_score += 4
+        # Monetization alignment bonus
+        if monetization in ['Freemium', 'Free (Ad-supported)'] and ('Medium' in marketing or 'High' in marketing):
+            growth_score += 10
+        elif monetization == 'Paid' and is_niche:
+            growth_score += 10
+        elif monetization == 'Subscription' and ('Medium' in marketing or 'High' in marketing):
+            growth_score += 8
         else:
-            engagement_score += 2
+            growth_score += 3
+            
+        # 4. RETENTION & ENGAGEMENT (Max 20)
+        retention_score = 0
+        if 'High' in retention or 'daily' in retention.lower(): retention_score += 20
+        elif 'Medium' in retention or 'occasional' in retention.lower(): retention_score += 12
+        else: retention_score += 5
         
-        # Rating consistency (10 points) - Compare to category average
-        rating_diff = rating - avg_category_rating
-        if rating_diff >= 0.5:
-            engagement_score += 10  # Much better than average
-        elif rating_diff >= 0.2:
-            engagement_score += 7  # Better than average
-        elif rating_diff >= 0:
-            engagement_score += 4  # On par with average
-        elif rating_diff >= -0.5:
-            engagement_score += 2  # Slightly below average
-        else:
-            engagement_score += 0  # Significantly below average
-        
-        # 4. MONETIZATION SCORE (15 points) - Business model effectiveness
-        monetization_score = 0
-        
-        if is_free:
-            # Free apps need scale
-            if installs >= 1000000:
-                monetization_score = 15  # 1M+ installs - excellent for freemium
-            elif installs >= 100000:
-                monetization_score = 12  # 100K+ - good
-            elif installs >= 50000:
-                monetization_score = 9   # 50K+ - average
-            elif installs >= 10000:
-                monetization_score = 6   # 10K+ - below average
-            else:
-                monetization_score = 3   # <10K - needs work
-        else:
-            # Paid apps need conversion
-            if price >= 0.99 and price <= 4.99:
-                # Good price point
-                if installs >= 10000:
-                    monetization_score = 15  # Good sales
-                elif installs >= 5000:
-                    monetization_score = 12
-                elif installs >= 1000:
-                    monetization_score = 9
-                else:
-                    monetization_score = 6
-            elif price < 0.99:
-                monetization_score = 8  # Low price, needs volume
-            else:
-                # Premium pricing
-                if installs >= 5000:
-                    monetization_score = 12  # Premium success
-                elif installs >= 1000:
-                    monetization_score = 9
-                else:
-                    monetization_score = 6
-        
-        # 5. COMPETITIVE POSITION SCORE (10 points) - Market positioning
-        competitive_score = 0
-        
-        # Category competition analysis
-        category_demand_factors = {
-            'GAME': {'competition': 'Very High', 'factor': 0.8},
-            'SOCIAL': {'competition': 'High', 'factor': 0.85},
-            'PRODUCTIVITY': {'competition': 'Medium', 'factor': 1.0},
-            'EDUCATION': {'competition': 'Medium', 'factor': 1.0},
-            'HEALTH': {'competition': 'Medium', 'factor': 1.0},
-            'FINANCE': {'competition': 'Medium-High', 'factor': 0.9},
-            'LIFESTYLE': {'competition': 'Medium', 'factor': 1.0},
-            'ENTERTAINMENT': {'competition': 'High', 'factor': 0.9},
-            'COMMUNICATION': {'competition': 'Very High', 'factor': 0.75},
-            'TRAVEL': {'competition': 'Medium', 'factor': 1.0}
-        }
-        
-        cat_info = category_demand_factors.get(category, {'competition': 'Unknown', 'factor': 1.0})
-        
-        # Score based on performance in competitive category
-        if category_count > 0:
-            position = (installs / avg_category_installs) if avg_category_installs > 0 else 0
-            if position >= 2.0:
-                competitive_score = 10  # Outperforming competitors
-            elif position >= 1.0:
-                competitive_score = 7   # On par with competitors
-            elif position >= 0.5:
-                competitive_score = 4   # Below average but viable
-            else:
-                competitive_score = 2   # Needs significant improvement
-        
-        # Calculate total success score
-        total_score = (
-            quality_score +
-            market_score +
-            engagement_score +
-            monetization_score +
-            competitive_score
-        )
-        
+        # Total
+        total_score = product_score + market_score + growth_score + retention_score
         success_score = min(100, max(0, total_score))
-        
-        # Calculate success probability using logistic function
         probability = 1 / (1 + math.exp(-(success_score - 50) / 15))
         
-        # ===== MARKET POSITION ANALYSIS =====
-        
-        # Determine market position
+        # ==========================================
+        # MARKET POSITION
+        # ==========================================
         if success_score >= 80:
-            market_position = 'Market Leader'
-            position_description = 'Your app is positioned as a top performer in its category'
+            market_position = 'Highly Viable'
+            position_description = 'Your strategic plan is well-balanced and positioned for strong market traction.'
         elif success_score >= 60:
-            market_position = 'Strong Contender'
-            position_description = 'Your app shows strong potential to compete effectively'
+            market_position = 'Moderately Viable'
+            position_description = 'Your plan has solid foundations, but requires refinement in key areas to mitigate risk.'
         elif success_score >= 40:
-            market_position = 'Growing App'
-            position_description = 'Your app has room for improvement but solid foundation'
+            market_position = 'High Risk'
+            position_description = 'Significant strategic gaps exist. Pivot or adjust your plan before investing heavily.'
         else:
-            market_position = 'Needs Improvement'
-            position_description = 'Significant improvements needed to compete effectively'
+            market_position = 'Critical Risk'
+            position_description = 'Current plan is highly unlikely to succeed without major fundamental changes.'
         
-        # ===== RISK & OPPORTUNITY ANALYSIS =====
-        
+        # ==========================================
+        # DYNAMIC RISKS (Score-based + Logic-based)
+        # ==========================================
         risks = []
+        
+        # Score-based risks (these WILL fire based on actual scores)
+        if product_score < 15:
+            risks.append({
+                'severity': 'High',
+                'issue': 'Weak product differentiation',
+                'impact': 'Without a clear unique hook, users have no compelling reason to switch from established competitors.'
+            })
+        elif product_score < 20:
+            risks.append({
+                'severity': 'Medium',
+                'issue': 'Moderate product risk',
+                'impact': 'Your product is solid but not exceptional. First-time teams face a steep learning curve.'
+            })
+        
+        if market_score < 15:
+            risks.append({
+                'severity': 'High',
+                'issue': 'Poor category-audience fit',
+                'impact': 'Your target audience and chosen category are misaligned. This makes discovery and conversion much harder.'
+            })
+        elif market_score < 20:
+            risks.append({
+                'severity': 'Medium',
+                'issue': 'Crowded or mismatched market',
+                'impact': 'You\'re entering a competitive space without a clear niche advantage.'
+            })
+        
+        if growth_score < 10:
+            risks.append({
+                'severity': 'High',
+                'issue': 'Severely underfunded growth plan',
+                'impact': 'Without marketing spend or a strong organic strategy, your app will be invisible in the store.'
+            })
+        elif growth_score < 15:
+            risks.append({
+                'severity': 'Medium',
+                'issue': 'Limited growth budget',
+                'impact': 'You\'ll need to rely heavily on organic discovery (ASO, word-of-mouth), which is slow and unpredictable.'
+            })
+        
+        if retention_score < 10:
+            risks.append({
+                'severity': 'High',
+                'issue': 'One-time use pattern',
+                'impact': 'Users will download, use once, and delete. You need constant new users to survive.'
+            })
+        elif retention_score < 15:
+            risks.append({
+                'severity': 'Medium',
+                'issue': 'Occasional use pattern',
+                'impact': 'Users will forget about your app between uses. You must invest in retention mechanics.'
+            })
+        
+        # Logic-based risks (specific dangerous combinations)
+        if 'None' in marketing and any(x in category for x in ['GAME', 'SOCIAL', 'ENTERTAINMENT', 'ARCADE']):
+            risks.append({
+                'severity': 'High',
+                'issue': 'Zero marketing in a saturated category',
+                'impact': 'Top categories have thousands of competitors. Organic discovery alone is nearly impossible.'
+            })
+        
+        if monetization == 'Paid' and is_broad:
+            risks.append({
+                'severity': 'Medium',
+                'issue': 'Paid pricing with broad audience',
+                'impact': 'Broad audiences expect free apps. Consider freemium to lower the barrier to entry.'
+            })
+        
+        if 'Low' in retention.lower() and monetization == 'Free (Ad-supported)':
+            risks.append({
+                'severity': 'High',
+                'issue': 'Ad-supported model with low retention',
+                'impact': 'Ads need repeated usage to generate revenue. One-time users generate almost nothing.'
+            })
+        
+        if not risks:
+            risks.append({
+                'severity': 'Low',
+                'issue': 'No major red flags detected',
+                'impact': 'Your plan is balanced. Focus on execution and gathering real user feedback.'
+            })
+        
+        # ==========================================
+        # DYNAMIC OPPORTUNITIES
+        # ==========================================
         opportunities = []
         
-        # Risk factors
-        if rating < 3.5:
-            risks.append({'severity': 'High', 'issue': 'Low rating', 'impact': 'Users may uninstall quickly'})
-        if reviews < 100 and installs > 1000:
-            risks.append({'severity': 'Medium', 'issue': 'Low engagement', 'impact': 'Users not leaving reviews suggests low engagement'})
-        if not is_free and installs < 1000:
-            risks.append({'severity': 'High', 'issue': 'Low paid app adoption', 'impact': 'Revenue potential severely limited'})
-        if installs < percentile_25 and category_count > 10:
-            risks.append({'severity': 'Medium', 'issue': 'Below category average', 'impact': 'Struggling to compete in saturated market'})
+        if product_score >= 20:
+            opportunities.append({
+                'potential': 'High',
+                'area': 'Strong product foundation',
+                'action': 'Your differentiation is clear. Double down on this in all marketing messaging.'
+            })
         
-        # Opportunity factors
-        if rating >= 4.0 and installs < percentile_50:
-            opportunities.append({'potential': 'High', 'area': 'Quality product, needs marketing', 'action': 'Increase marketing spend to reach more users'})
-        if installs > avg_category_installs:
-            opportunities.append({'potential': 'Medium', 'area': 'Market leader potential', 'action': 'Consider premium features or expansion'})
-        if not is_free and rating >= 4.5:
-            opportunities.append({'potential': 'High', 'area': 'Premium pricing power', 'action': 'Could increase price point with strong quality'})
-        if category_count < 100:
-            opportunities.append({'potential': 'Medium', 'area': 'Less competitive category', 'action': 'Focus on quality to dominate niche market'})
+        if retention_score >= 18:
+            opportunities.append({
+                'potential': 'High',
+                'area': 'High lifetime value potential',
+                'action': 'Daily users are valuable. Build a subscription model or recurring revenue stream from day one.'
+            })
         
-        # ===== COMPARATIVE BENCHMARKS =====
+        if market_score >= 20:
+            opportunities.append({
+                'potential': 'High',
+                'area': 'Strong market fit',
+                'action': 'Your audience and category align well. Focus on rapid user acquisition to capture market share.'
+            })
         
-        benchmarks = {
-            'rating': {
-                'yours': rating,
-                'category_avg': round(avg_category_rating, 2),
-                'market_avg': round(avg_market_rating, 2),
-                'percentile': calculate_percentile(rating, [app.get('rating', 0) for app in all_data if app.get('rating', 0) > 0])
-            },
-            'installs': {
-                'yours': installs,
-                'category_avg': int(avg_category_installs),
-                'market_avg': int(avg_market_installs),
-                'percentile': calculate_percentile(installs, all_installs)
-            },
-            'reviews': {
-                'yours': reviews,
-                'category_avg': int(avg_category_reviews),
-                'market_avg': int(sum(app.get('reviews', 0) for app in all_data) / len(all_data)) if all_data else 0,
-                'percentile': calculate_percentile(reviews, [app.get('reviews', 0) for app in all_data])
-            }
-        }
+        if growth_score >= 15:
+            opportunities.append({
+                'potential': 'Medium',
+                'area': 'Well-funded growth',
+                'action': 'You have budget to experiment. Test multiple acquisition channels (social, search, influencers) quickly.'
+            })
         
-        # ===== SUCCESS ROADMAP =====
+        if is_niche and product_score >= 15:
+            opportunities.append({
+                'potential': 'High',
+                'area': 'Niche domination',
+                'action': 'Niche markets reward specialization. Build deep features your broad competitors ignore.'
+            })
         
+        if 'Low' in marketing or 'None' in marketing:
+            opportunities.append({
+                'potential': 'Medium',
+                'area': 'Organic growth leverage',
+                'action': 'Invest heavily in ASO, content marketing, and community building to compensate for low paid spend.'
+            })
+        
+        if not opportunities:
+            opportunities.append({
+                'potential': 'Medium',
+                'area': 'Execution advantage',
+                'action': 'Focus on flawless launch and rapid iteration based on real user feedback.'
+            })
+        
+        # ==========================================
+        # DYNAMIC ROADMAP (Based on WEAKEST area)
+        # ==========================================
         roadmap = []
+        scores = {
+            'product': product_score,
+            'market': market_score,
+            'growth': growth_score,
+            'retention': retention_score
+        }
+        weakest = min(scores, key=scores.get)
         
-        if rating < 4.0:
+        if weakest == 'product':
             roadmap.append({
                 'priority': 'Critical',
-                'milestone': 'Improve rating to 4.0+',
-                'actions': ['Fix critical bugs', 'Improve user experience', 'Add requested features'],
-                'impact': '+15-20 success points'
+                'milestone': 'Sharpen your unique value',
+                'actions': [
+                    'Survey 20+ potential users about their biggest pain points',
+                    'Identify ONE feature competitors do poorly and do it 10x better',
+                    'Rewrite your store description to lead with this unique benefit'
+                ],
+                'impact': 'Increases conversion rate by 20-40%'
             })
         
-        if installs < percentile_50:
+        if weakest == 'market':
+            roadmap.append({
+                'priority': 'Critical',
+                'milestone': 'Fix your market positioning',
+                'actions': [
+                    'Reconsider your target audience or category choice',
+                    'Research the top 10 competitors in your chosen space',
+                    'Find an underserved sub-niche within your category'
+                ],
+                'impact': 'Reduces customer acquisition cost by 30%+'
+            })
+        
+        if weakest == 'growth':
+            roadmap.append({
+                'priority': 'Critical',
+                'milestone': 'Build a realistic growth engine',
+                'actions': [
+                    'Master App Store Optimization (keywords, icon, screenshots)',
+                    'Build a pre-launch waitlist or community',
+                    'Plan a launch campaign with influencers or content partners'
+                ],
+                'impact': 'Essential for visibility in a crowded market'
+            })
+        
+        if weakest == 'retention':
+            roadmap.append({
+                'priority': 'Critical',
+                'milestone': 'Design for repeated use',
+                'actions': [
+                    'Add push notifications with personalized value',
+                    'Implement streaks, progress tracking, or gamification',
+                    'Create reasons for users to return weekly (new content, updates)'
+                ],
+                'impact': 'Boosts lifetime value by 3-5x'
+            })
+        
+        # Add a secondary roadmap item based on second-weakest area
+        sorted_scores = sorted(scores.items(), key=lambda x: x[1])
+        second_weakest = sorted_scores[1][0]
+        
+        if second_weakest == 'product' and weakest != 'product':
             roadmap.append({
                 'priority': 'High',
-                'milestone': 'Reach category median installs',
-                'actions': ['Increase marketing budget', 'Optimize ASO', 'Consider paid promotion'],
-                'impact': '+10-15 success points'
+                'milestone': 'Strengthen product differentiation',
+                'actions': ['Identify one underserved user need', 'A/B test feature variations', 'Gather early user feedback aggressively'],
+                'impact': 'Improves retention and word-of-mouth'
             })
-        
-        if reviews < 1000:
+        elif second_weakest == 'growth' and weakest != 'growth':
             roadmap.append({
-                'priority': 'Medium',
-                'milestone': 'Build review base to 1,000+',
-                'actions': ['Implement review prompts', 'Engage with users', 'Respond to feedback'],
-                'impact': '+5-10 success points'
+                'priority': 'High',
+                'milestone': 'Optimize your growth strategy',
+                'actions': ['Research ASO best practices for your category', 'Plan a launch timeline', 'Identify 3 free marketing channels'],
+                'impact': 'Accelerates early traction'
+            })
+        elif second_weakest == 'retention' and weakest != 'retention':
+            roadmap.append({
+                'priority': 'High',
+                'milestone': 'Improve user retention',
+                'actions': ['Add onboarding that teaches core value', 'Implement re-engagement notifications', 'Create weekly content updates'],
+                'impact': 'Increases long-term user value'
+            })
+        elif second_weakest == 'market' and weakest != 'market':
+            roadmap.append({
+                'priority': 'High',
+                'milestone': 'Refine market positioning',
+                'actions': ['Study top 5 competitors deeply', 'Identify gaps in their offerings', 'Position your app to fill those gaps'],
+                'impact': 'Creates clearer competitive advantage'
             })
         
-        if not roadmap:
+        if success_score >= 70:
             roadmap.append({
                 'priority': 'Growth',
                 'milestone': 'Scale and expand',
-                'actions': ['Add premium features', 'Expand to new markets', 'Build brand loyalty'],
+                'actions': ['Add premium features or subscription tier', 'Expand to adjacent markets', 'Build brand loyalty programs'],
                 'impact': 'Market leadership'
             })
         
-        # ===== FINAL RECOMMENDATIONS =====
-        
+        # ==========================================
+        # RECOMMENDATIONS
+        # ==========================================
         recommendations = []
         
-        if rating < 4.0:
-            recommendations.append("Prioritize user experience improvements to achieve 4.0+ rating - this is critical for long-term success")
-        if reviews < 500:
-            recommendations.append("Implement strategic review prompts and user engagement features to build social proof")
-        if installs < percentile_50:
-            recommendations.append("Invest in user acquisition through ASO optimization, social media marketing, or paid advertising")
-        if not is_free and installs < 5000:
-            recommendations.append("Consider freemium model or free trial to increase user base before monetization")
-        if rating >= 4.0 and installs < percentile_25:
-            recommendations.append("Your quality is strong - focus on marketing to reach more users")
-        if rating >= 4.5 and reviews >= 5000:
-            recommendations.append("Excellent foundation - consider premium features or expansion to maximize revenue")
+        if product_score < 15:
+            recommendations.append("Your app lacks a clear unique angle. Before launch, find ONE specific problem you solve better than anyone else.")
+        if growth_score < 15:
+            recommendations.append("With limited marketing budget, ASO (App Store Optimization) and community building are non-negotiable. Master these first.")
+        if retention_score < 15:
+            recommendations.append("Design retention mechanics from day one: push notifications, streaks, progress tracking, or regular content updates.")
+        if market_score < 15:
+            recommendations.append("Reconsider your target audience or category. A niche audience in a less crowded category is often easier to win.")
+        if monetization == 'Paid' and is_broad:
+            recommendations.append("Consider switching to freemium. Broad audiences rarely pay upfront but will spend on in-app purchases.")
+        
+        if success_score >= 70:
+            recommendations.append("Your plan is strong. Focus on flawless execution and rapid iteration based on real user feedback.")
+            recommendations.append("Set up analytics from day one to track actual retention and conversion vs. these projections.")
         
         if not recommendations:
-            recommendations.append("Your app is well-positioned for success!")
-            recommendations.append("Focus on retention and building long-term user loyalty")
-            recommendations.append("Consider expansion or premium features to maximize potential")
+            recommendations.append("Focus on flawless execution and gathering early user feedback.")
+            recommendations.append("Set up analytics from day one to track actual retention and conversion rates.")
         
-        # ===== FACTORS FOR UI DISPLAY =====
+        # ==========================================
+        # CLEAN DISPLAY LABELS (for UI)
+        # ==========================================
+        def clean_label(text, mapping):
+            for key, label in mapping.items():
+                if key in text:
+                    return label
+            return text
         
-        factors = {
-            'qualityScore': round(quality_score, 1),
-            'marketScore': round(market_score, 1),
-            'engagementScore': round(engagement_score, 1),
-            'monetizationScore': round(monetization_score, 1),
-            'competitiveScore': round(competitive_score, 1),
-            'ratingImpact': f"{rating:.1f}/5.0 ({rating_diff:+.1f} vs avg)",
-            'installProjection': f"{installs:,}",
-            'categoryPosition': f"{position:.1f}x category avg",
-            'revenuePotential': f"${price:.2f}" if not is_free else "Freemium Model",
-            'competitionLevel': cat_info['competition'],
-            'categoryPerformance': 'Excellent' if success_score >= 70 else 'Good' if success_score >= 50 else 'Average' if success_score >= 30 else 'Needs Work',
-            'engagementPotential': 'High' if engagement_score >= 15 else 'Medium' if engagement_score >= 10 else 'Low'
+        uvp_labels = {
+            'nothing else': '🚀 Unique solution',
+            'better': '🔧 Improved version',
+            'similar': '⚠️ Similar to others',
+            'High': '🚀 Unique solution',
+            'Medium': '🔧 Improved version',
+            'Low': '⚠️ Similar to others'
         }
         
+        retention_labels = {
+            'daily': '📅 Used daily',
+            'occasional': '📆 Used weekly/monthly',
+            'one-time': '⚡ Used once',
+            'High': '📅 Used daily',
+            'Medium': '📆 Used weekly/monthly',
+            'Low': '⚡ Used once'
+        }
+        
+        marketing_labels = {
+            'None': '🚫 No budget',
+            'Low': '💰 Small budget',
+            'Medium': '💵 Medium budget',
+            'High': '💎 Large budget'
+        }
+        
+        factors = {
+            'productScore': round(product_score, 1),
+            'marketScore': round(market_score, 1),
+            'growthScore': round(growth_score, 1),
+            'retentionScore': round(retention_score, 1),
+            'uvpDisplay': clean_label(uvp, uvp_labels),
+            'categoryPerformance': 'Strong' if market_score >= 20 else 'Moderate' if market_score >= 15 else 'Needs Work',
+            'marketingDisplay': clean_label(marketing, marketing_labels),
+            'retentionDisplay': clean_label(retention, retention_labels),
+            'monetizationStrategy': monetization
+        }
+        
+                # ==========================================
+        # BENCHMARKS (Show TARGETS, not N/A)
+        # ==========================================
+        
+        # Calculate realistic targets based on their plan
+        target_rating = max(4.0, round(avg_category_rating + 0.2, 2))
+        
+        # Install targets based on marketing budget and retention
+        if 'High' in marketing:
+            if 'High' in retention or 'daily' in retention.lower():
+                install_target = "100K-500K (Year 1)"
+            else:
+                install_target = "50K-200K (Year 1)"
+        elif 'Medium' in marketing:
+            if 'High' in retention or 'daily' in retention.lower():
+                install_target = "20K-100K (Year 1)"
+            else:
+                install_target = "10K-50K (Year 1)"
+        elif 'Low' in marketing:
+            if 'High' in retention or 'daily' in retention.lower():
+                install_target = "5K-20K (Year 1)"
+            else:
+                install_target = "1K-10K (Year 1)"
+        else:  # None
+            if 'High' in retention or 'daily' in retention.lower():
+                install_target = "500-5K (Year 1)"
+            else:
+                install_target = "100-1K (Year 1)"
+        
+        # Review strategy based on retention pattern
+        if 'High' in retention or 'daily' in retention.lower():
+            review_strategy = "Prompt after 7-day streak"
+        elif 'Medium' in retention or 'occasional' in retention.lower():
+            review_strategy = "Prompt after 3rd use"
+        else:
+            review_strategy = "Prompt right after task completion"
+        
+        benchmarks = {
+            'rating': {
+                'yours': f"{target_rating}+ ⭐",
+                'category_avg': round(avg_category_rating, 2),
+                'market_avg': round(avg_market_rating, 2),
+                'percentile': 0,
+                'note': f"Goal: Aim for {target_rating}+ to stand out in {category}"
+            },
+            'installs': {
+                'yours': install_target,
+                'category_avg': f"{int(avg_category_installs):,}",
+                'market_avg': f"{int(avg_market_installs):,}",
+                'percentile': 0,
+                'note': "Goal: Top 25% of apps in this category have 10x the average."
+            },
+            'reviews': {
+                'yours': review_strategy,
+                'category_avg': 'Varies',
+                'market_avg': 'Varies',
+                'percentile': 0,
+                'note': "Goal: Implement in-app review prompts after positive user actions."
+            }
+        }
         result = {
             'successScore': round(success_score, 1),
             'probability': round(probability, 4),
@@ -1344,9 +1384,8 @@ def predict_app_success():
         
     except Exception as e:
         logger.error(f"Error in predict_app_success: {e}")
-        return jsonify({'error': str(e), 'message': 'Failed to predict app success'}), 500
-
-
+        return jsonify({'error': str(e), 'message': 'Failed to evaluate app readiness'}), 500
+    
 def calculate_percentile(value, data_list):
     """Calculate percentile rank of a value in a dataset"""
     if not data_list:

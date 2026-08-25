@@ -117,7 +117,6 @@ All analytics routes accept optional `category`, `type`, and `content_rating` qu
 | `GET` | `/api/top-developers` | Developer leaderboard |
 | `GET` | `/api/content-rating-distribution` | Content-rating breakdown |
 | `GET` | `/api/rating-distribution` | Rating buckets |
-| `GET` | `/api/correlation-analysis` | Rating, reviews, and installs correlations |
 | `GET` | `/api/price-distribution` | Pricing and install distribution |
 | `GET` | `/api/release-year-distribution` | Release-year trend |
 | `GET` | `/api/insights` | Generated market insights |

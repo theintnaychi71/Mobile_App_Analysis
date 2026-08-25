@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { 
   getDashboardStats, getCategoryAnalysis, getTopApps, 
-  getRatingDistribution, getCorrelationAnalysis, getPriceDistribution, getInsights, getReleaseYearDistribution,
+  getRatingDistribution, getPriceDistribution, getInsights, getReleaseYearDistribution,
   getFilterOptions, getTopDevelopers, getContentRatingDistribution, getInstallDistribution
 } from '../api/api';
 import { 
   Smartphone, TrendingUp, Users, Download, Star, 
   PieChart, BarChart3, RefreshCw, Filter, ArrowUpRight,
-  Package, DollarSign, Activity, ScatterChart as ScatterChartIcon, Trophy, Award, Calendar, AlertCircle
+  Package, DollarSign, Activity, Trophy, Award, Calendar, AlertCircle
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart as RechartsPieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
-  ScatterChart, Scatter, ZAxis
+  ZAxis
 } from 'recharts';
 
 const Dashboard = () => {
@@ -20,7 +20,6 @@ const Dashboard = () => {
   const [categoryData, setCategoryData] = useState([]);
   const [topApps, setTopApps] = useState([]);
   const [ratingDistribution, setRatingDistribution] = useState([]);
-  const [correlationData, setCorrelationData] = useState(null);
   const [priceDistribution, setPriceDistribution] = useState(null);
   const [releaseYearDistribution, setReleaseYearDistribution] = useState([]);
   const [insights, setInsights] = useState([]);
@@ -76,7 +75,6 @@ const Dashboard = () => {
             topDevelopersData,
             contentRatingDistData,
             ratingDistData,
-            correlationAnalysisData,
             priceDistData,
             releaseYearData,
             insightsData,
@@ -86,7 +84,6 @@ const Dashboard = () => {
             getTopDevelopers('installs', filters),
             getContentRatingDistribution(filters),
             getRatingDistribution(filters),
-            getCorrelationAnalysis(filters),
             getPriceDistribution(filters),
             getReleaseYearDistribution(filters),
             getInsights(filters),
@@ -96,7 +93,6 @@ const Dashboard = () => {
           setTopDevelopers(topDevelopersData);
           setContentRatingData(contentRatingDistData);
           setRatingDistribution(ratingDistData);
-          setCorrelationData(correlationAnalysisData);
           setPriceDistribution(priceDistData);
           setReleaseYearDistribution(releaseYearData || []);
           setInsights(insightsData);
@@ -173,13 +169,6 @@ const Dashboard = () => {
     { tier: '<10K', count: 0 }
   ];
 
-  // ✅ Scatter data for installs-based plots.
-  // Uses backend scatter_data if it includes installs, otherwise falls back to topApps.
-  const scatterBase = correlationData?.scatter_data || [];
-  const installsScatterData = scatterBase.some(p => typeof p.installs === 'number')
-    ? scatterBase
-    : topApps;
-
   return (
     <div className="pt-20 min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -239,7 +228,7 @@ const Dashboard = () => {
 
         {/* Tab Navigation */}
         <div className="flex space-x-4 mb-8 border-b border-gray-700 pb-4">
-          {['overview', 'apps', 'correlations', 'pricing', 'trends'].map((tab) => (
+          {['overview', 'apps', 'pricing', 'trends'].map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === tab ? 'bg-google-blue text-white' : 'bg-play-surface text-gray-400 hover:text-white'}`}>
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
@@ -492,64 +481,6 @@ const Dashboard = () => {
           </>
         )}
 
-        {/* Correlations Tab */}
-        {activeTab === 'correlations' && correlationData && (
-          <>
-            <div className="grid lg:grid-cols-3 gap-6 mb-8">
-              <CorrelationCard title="Rating vs Reviews" value={correlationData.correlations.rating_reviews} description="Correlation between app ratings and review counts" color="google-blue" />
-              <CorrelationCard title="Rating vs Installs" value={correlationData.correlations.rating_installs} description="Correlation between app ratings and install counts" color="google-green" />
-              <CorrelationCard title="Reviews vs Installs" value={correlationData.correlations.reviews_installs} description="Correlation between review counts and install counts" color="google-yellow" />
-            </div>
-
-            <div className="space-y-6">
-              {/* Rating vs Reviews Scatter Plot */}
-              <ChartCard title="Rating vs Reviews Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
-                <ResponsiveContainer width="100%" height={400}>
-                  <ScatterChart data={correlationData.scatter_data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis type="number" dataKey="rating" name="Rating" domain={[0, 5]} stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
-                    <YAxis type="number" dataKey="reviews" name="Reviews" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
-                    <Scatter fill="#4285F4" />
-                  </ScatterChart>
-                </ResponsiveContainer>
-                <CorrelationInsight value={correlationData.correlations.rating_reviews} xName="rating" yName="review count" />
-                <p className="text-center text-gray-400 text-sm mt-4">Sample size: {correlationData.sample_size} apps from {correlationData.total_analyzed} total</p>
-              </ChartCard>
-
-              <div className="grid lg:grid-cols-2 gap-6">
-                {/* Rating vs Installs Scatter Plot */}
-                <ChartCard title="Rating vs Installs Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ScatterChart data={installsScatterData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis type="number" dataKey="rating" name="Rating" domain={[0, 5]} stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
-                      <YAxis type="number" dataKey="installs" name="Installs" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
-                      <Scatter fill="#0F9D58" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                  <CorrelationInsight value={correlationData.correlations.rating_installs} xName="rating" yName="install count" />
-                </ChartCard>
-
-                {/* Reviews vs Installs Scatter Plot */}
-                <ChartCard title="Reviews vs Installs Scatter Plot" icon={<ScatterChartIcon className="w-5 h-5" />}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <ScatterChart data={installsScatterData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis type="number" dataKey="reviews" name="Reviews" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} />
-                      <YAxis type="number" dataKey="installs" name="Installs" stroke="#9CA3AF" fontSize={12} tick={{ fill: '#9CA3AF' }} tickFormatter={(value) => formatNumber(value)} />
-                      <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ backgroundColor: '#1F1F1F', border: '1px solid #374151', borderRadius: '8px' }} itemStyle={{ color: '#fff' }} formatter={(value, name) => [name === 'Rating' ? value.toFixed(2) : formatNumber(value), name]} />
-                      <Scatter fill="#F4B400" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                  <CorrelationInsight value={correlationData.correlations.reviews_installs} xName="review count" yName="install count" />
-                </ChartCard>
-              </div>
-            </div>
-          </>
-        )}
-
         {/* Pricing Tab */}
         {activeTab === 'pricing' && priceDistribution && (
           <>
@@ -710,7 +641,6 @@ const InsightCard = ({ title, icon, insight }) => (
   </div>
 );
 
-// Auto-generated analysis text under each scatter plot
 const CorrelationInsight = ({ value, xName, yName }) => {
   const abs = Math.abs(value);
   const positive = value >= 0;
@@ -740,24 +670,6 @@ const CorrelationInsight = ({ value, xName, yName }) => {
         <span className="font-semibold text-white">Analysis — {label} (r = {value.toFixed(3)}): </span>
         In general, {sentence}
       </p>
-    </div>
-  );
-};
-
-const CorrelationCard = ({ title, value, description, color }) => {
-  const colorClasses = {
-    'google-green': 'bg-google-green/10 text-google-green border-google-green',
-    'google-blue': 'bg-google-blue/10 text-google-blue border-google-blue',
-    'google-yellow': 'bg-google-yellow/10 text-google-yellow border-google-yellow',
-    'google-red': 'bg-google-red/10 text-google-red border-google-red',
-  };
-  return (
-    <div className={`card border-l-4 ${colorClasses[color]}`}>
-      <div className="text-center">
-        <h4 className="font-semibold mb-2">{title}</h4>
-        <div className={`text-4xl font-bold ${colorClasses[color].split(' ')[1]} mb-2`}>{value.toFixed(3)}</div>
-        <p className="text-gray-400 text-sm">{description}</p>
-      </div>
     </div>
   );
 };

@@ -108,18 +108,6 @@ export const getRatingDistribution = async (filters = {}) => {
   }
 };
 
-export const getCorrelationAnalysis = async (filters = {}) => {
-  try {
-    const query = buildFilterQuery(filters);
-    const url = query ? `/correlation-analysis?${query}` : '/correlation-analysis';
-    const response = await api.get(url);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching correlation analysis:', error);
-    throw error;
-  }
-};
-
 export const getPriceDistribution = async (filters = {}) => {
   try {
     const query = buildFilterQuery(filters);
